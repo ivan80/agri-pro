@@ -26,6 +26,21 @@ Sito web che spiega/sponsorizza e permette di scaricare un'app per la gestione d
 - Landing award-worthy: hero cinetico mask-reveal, marquee, capitoli manifesto, sezione Ecowitt, pricing bento, download CTA. Dashboard con sidebar.
 - Tested: backend 17/17 pytest, frontend tutti i flussi critici OK.
 
+## MAJOR REWORK (2026-07-17) — Motore Agronomico (da 4 PDF utente "Frutteto-Agro")
+Adottata la logica dell'app dell'utente. App ora è un motore agronomico multi-utente (auth JWT), avviato VERGINE (nessuna pianta/prodotto pre-inseriti).
+- Backend nuovo (server.py + engine.py + phases.py):
+  - Piante con fasi fenologiche BBCH auto-generate da template per specie (drupacee, pesco, biricoccolo, pomacee, vite, fico, nocciolo, avocado). Ogni fase ha rischio fungino/insetti/acari 0-3.
+  - Prodotti fitosanitari (categoria, persistenza, carenza, soglia dilavamento, dose, in_stock) + compatibilità prodotto-pianta-fase.
+  - Trattamenti (calcolo scadenza da persistenza, stato valid/leached/expired/superseded, supersede stessa categoria).
+  - Motore (POST /cycle/run): assess_fungal_risk, is_raining, estimate_leaf_wetness, check_leaching (dilavamento post-pioggia), check_expiry, blocco pioggia, generate_phase_recommendations, alert rischio fungino critico.
+  - Raccomandazioni (execute→trattamento, dismiss), Alert (ack), Meteo Ecowitt (reale+demo, storico), irrigazione (soglie suolo), config soglie.
+  - AI: generate-phases (Claude), advisor (Claude).
+- Frontend nuovo: Dashboard (KPI, Ecowitt, irrigazione, run ciclo), Piante & Fasi (add + dettaglio fasi + set fase + AI), Prodotti, Trattamenti, Raccomandazioni, Alert, Meteo, Assistente AI, Impostazioni. Nav a gruppi.
+- Test: backend 27/27 pytest, tutti i flussi frontend 100%.
+
+## DEFERRED dai PDF (non ancora implementati)
+- Piano di Lavoro (ottimizzatore miscele/vasca litri), Diagnosi foto AI, pH & irrigazione (tracking pH per pianta + fertilizzazioni), Calendario colturale (matrice specie×mese), Grafici meteo avanzati, Report PDF/HTML, notifiche Telegram (richiede bot token utente), previsioni 7 giorni Open-Meteo, foto/note per pianta, matrice incompatibilità/sinergie prodotti, scheduler cron automatico.
+
 ## Backlog / Next
 - P1: Integrazione pagamenti reale (Stripe) per abbonamenti/lifetime.
 - P1: Ecowitt — mappatura completa multi-canale sensori suolo + storico persistito su DB.
