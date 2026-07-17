@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="21" time="48.569" timestamp="2026-07-17T13:59:29.942940+00:00" hostname="agent-env-08fe0c7c-067c-48e6-9c73-1c5586c67bdd"><testcase classname="tests.backend_test.TestAuth" name="test_login_admin" time="1.579" /><testcase classname="tests.backend_test.TestPlants" name="test_plants_crud_flow" time="2.439" /><testcase classname="tests.backend_test.TestAuth" name="test_register_returns_user_with_trial" time="0.696" /><testcase classname="tests.backend_test.TestAuth" name="test_register_sets_cookie" time="0.076" /><testcase classname="tests.backend_test.TestAuth" name="test_register_duplicate_email" time="1.265" /><testcase classname="tests.backend_test.TestPlants" name="test_plants_user_isolation" time="1.393" /><testcase classname="tests.backend_test.TestAuth" name="test_login_invalid_credentials" time="0.736" /><testcase classname="tests.backend_test.TestPlants" name="test_plants_requires_auth" time="0.572" /><testcase classname="tests.backend_test.TestAuth" name="test_me_unauthenticated" time="0.214" /><testcase classname="tests.backend_test.TestIrrigation" name="test_irrigation_create_and_list" time="0.126" /><testcase classname="tests.backend_test.TestIrrigation" name="test_stats" time="0.158" /><testcase classname="tests.backend_test.TestAuth" name="test_logout_clears_cookie" time="0.824" /><testcase classname="tests.backend_test.TestWeather" name="test_weather_demo_fallback" time="0.068" /><testcase classname="tests.backend_test.TestWeather" name="test_weather_settings_lifecycle" time="0.628" /><testcase classname="tests.backend_test.TestAuth" name="test_login_returns_token_and_cookie" time="0.682" /><testcase classname="tests.backend_test.TestReference" name="test_phases" time="0.686" /><testcase classname="tests.backend_test.TestAuth" name="test_register_returns_token" time="0.664" /><testcase classname="tests.backend_test.TestReference" name="test_plans" time="0.209" /><testcase classname="tests.backend_test.TestAdvisor" name="test_advisor_returns_italian_answer" time="26.768" /><testcase classname="tests.backend_test.TestAuth" name="test_me_via_bearer_only_no_cookie" time="10.313"><failure message="requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='agri-track-pro-3.preview.emergentagent.com', port=443): Read timed out. (read timeout=10)">/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:534: in _make_request
+    response = conn.getresponse()
+               ^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/connection.py:571: in getresponse
+    httplib_response = super().getresponse()
+                       ^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:1415: in getresponse
+    response.begin()
+/usr/local/lib/python3.11/http/client.py:330: in begin
+    version, status, reason = self._read_status()
+                              ^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/http/client.py:291: in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/socket.py:718: in readinto
+    return self._sock.recv_into(b)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/ssl.py:1314: in recv_into
+    return self.read(nbytes, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/local/lib/python3.11/ssl.py:1166: in read
+    return self._sslobj.read(len, buffer)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   TimeoutError: The read operation timed out
+
+The above exception was the direct cause of the following exception:
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:696: in send
+    resp = conn.urlopen(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:842: in urlopen
+    retries = retries.increment(
+/root/.venv/lib/python3.11/site-packages/urllib3/util/retry.py:498: in increment
+    raise reraise(type(error), error, _stacktrace)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/urllib3/util/util.py:39: in reraise
+    raise value
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:788: in urlopen
+    response = self._make_request(
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:536: in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+/root/.venv/lib/python3.11/site-packages/urllib3/connectionpool.py:367: in _raise_timeout
+    raise ReadTimeoutError(
+E   urllib3.exceptions.ReadTimeoutError: HTTPSConnectionPool(host='agri-track-pro-3.preview.emergentagent.com', port=443): Read timed out. (read timeout=10)
+
+During handling of the above exception, another exception occurred:
+backend/tests/backend_test.py:126: in test_me_via_bearer_only_no_cookie
+    r = requests.post(
+/root/.venv/lib/python3.11/site-packages/requests/api.py:134: in post
+    return request("post", url, data=data, json=json, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/api.py:71: in request
+    return session.request(method=method, url=url, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:651: in request
+    resp = self.send(prep, **send_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/sessions.py:784: in send
+    r = adapter.send(request, **kwargs)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/root/.venv/lib/python3.11/site-packages/requests/adapters.py:742: in send
+    raise ReadTimeout(e, request=request)
+E   requests.exceptions.ReadTimeout: HTTPSConnectionPool(host='agri-track-pro-3.preview.emergentagent.com', port=443): Read timed out. (read timeout=10)</failure></testcase><testcase classname="tests.backend_test.TestAuth" name="test_me_with_invalid_bearer" time="1.937" /></testsuite></testsuites>

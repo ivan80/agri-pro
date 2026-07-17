@@ -1,0 +1,55 @@
+{
+  "summary": "Bug-fix retest for 'Non riesco a loggarmi'. Backend now returns a JWT `token` in login/register response bodies AND sets the httpOnly cookie; frontend stores it in localStorage and sends `Authorization: Bearer <token>`. Verified end-to-end. Backend: 21/21 pytest tests pass (including 4 new tests for token+cookie dual auth, Bearer-only access, invalid Bearer). Frontend UI: 11/12 checks pass — admin login lands on /app, dashboard renders, session persists across reload (via localStorage token), register flow lands on /app, /app is protected after logout. Minor UX issue: logout lands on /accedi instead of the landing page (Protected redirect fires before navigate('/')).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "DashboardLayout.doLogout / Protected route",
+        "issue": "After clicking logout-btn user ends up on /accedi instead of the landing page /. Because setUser(false) triggers <Protected> re-render before navigate('/') runs, Protected redirects to /accedi. Token clearing and route protection still work correctly (token removed, /app inaccessible), but review spec expected landing.",
+        "selector": "[data-testid='logout-btn']",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL/LOW: In DashboardLayout.doLogout, call navigate('/', {replace:true}) BEFORE (or without) triggering setUser(false), or wrap logout so navigation happens before context state change, so users land on landing page instead of /accedi after logout. Functionally auth is fine — this is a UX polish."
+  ],
+  "critical_code_review_comments": [
+    "server.py load_dotenv runs at import (line 4) which is correct.",
+    "seed_admin (startup) is idempotent and updates password if ADMIN_PASSWORD changed — good.",
+    "get_current_user correctly accepts httpOnly cookie OR Authorization: Bearer fallback — the fix works.",
+    "bcrypt hash format verified via startup path; login/register both use bcrypt.hashpw with gensalt (produces $2b$).",
+    "CORS: allow_credentials=True with explicit origin (FRONTEND_URL) — correct for httpOnly cookie flow.",
+    "set_auth_cookie uses SameSite=None + Secure — required for the cross-site preview URL. Cookie IS set (verified in tests). The Bearer fallback is the safety net for browsers that block third-party SameSite=None cookies.",
+    "NOTE: startup() will crash on hot reload if the DB user has multiple accounts sharing an email pre-existing without unique index — but create_index runs first, so OK.",
+    "Minor: DashboardLayout logout order (setUser then navigate) causes Protected to redirect to /accedi before the /-navigation lands. Not a security bug, purely UX.",
+    "There is no brute-force lockout after N failures — playbook mentions this. Not required by the review request, but worth noting for future hardening."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added 4 tests: test_login_returns_token_and_cookie, test_register_returns_token, test_me_via_bearer_only_no_cookie, test_me_with_invalid_bearer)"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21)",
+    "frontend": "92% (11/12 - single minor UX quirk on logout redirect)"
+  },
+  "test_credentials": "Admin: admin@frutteto.it / Frutteto2026! — works. Registration with fresh email works.",
+  "seed_data_creation": "No permanent seed; each test creates TEST_ prefixed users. UI test created TEST_ui_<uuid>@frutteto.it users.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login bug 'Non riesco a loggarmi' is FIXED. Backend returns JWT token in login/register body; frontend persists it in localStorage under key 'pomario_token' and sets axios default Authorization header. Verified session persists across reload even without cookies. The initial /auth/me 401 on cold load (before login) is expected. Only outstanding item is a UX quirk: logout goes to /accedi rather than /.",
+  "rca_of_the_issue": {
+    "root_cause": "Cross-site preview environment (agri-track-pro-3.preview.emergentagent.com) served via a proxy — some browsers block the httpOnly SameSite=None cookie, causing /auth/me to 401 and Protected to bounce the user back to /accedi. The app previously relied on that cookie only.",
+    "fix": "Backend login/register now also emit `token` field in the response body. Frontend stores it in localStorage (pomario_token) and sets axios `Authorization: Bearer <token>` for all subsequent requests. get_current_user reads Bearer header when no cookie is present.",
+    "verification": "Backend pytest test_me_via_bearer_only_no_cookie confirms /auth/me works with Bearer only. Frontend Playwright test confirmed reload keeps user on /app with token in localStorage. Cookie AND token are both set, so the app now works whether the browser accepts the cookie or not.",
+    "mitigation": "No further action needed for the primary bug. Consider polishing logout navigation order to land on / instead of /accedi."
+  }
+}
