@@ -1,0 +1,132 @@
+{
+  "theme": "light",
+  "typography": {
+    "fonts": {
+      "headings": "Cabinet Grotesk",
+      "accents": "Cormorant Garamond",
+      "body": "Satoshi",
+      "mono": "JetBrains Mono"
+    },
+    "hierarchy": {
+      "h1": "text-5xl sm:text-6xl lg:text-7xl font-black tracking-tighter leading-none text-forest-900",
+      "h2": "text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-forest-900",
+      "h3": "text-2xl sm:text-3xl font-medium tracking-tight text-forest-800",
+      "body": "text-base lg:text-lg leading-relaxed text-forest-700/80 font-normal",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-orange-500",
+      "quote": "font-serif text-3xl italic text-forest-900"
+    }
+  },
+  "colors": {
+    "background": {
+      "main": "#F9F9F6",
+      "surface": "#FFFFFF",
+      "glass": "rgba(255, 255, 255, 0.7)"
+    },
+    "primary": {
+      "forest": {
+        "900": "#1B3B22",
+        "800": "#25502E",
+        "700": "#2F653A",
+        "DEFAULT": "#2F653A"
+      },
+      "leaf": {
+        "DEFAULT": "#4CAF50",
+        "light": "#81C784"
+      }
+    },
+    "secondary": {
+      "sky": {
+        "DEFAULT": "#0288D1",
+        "light": "#4FC3F7"
+      }
+    },
+    "accent": {
+      "citrus": {
+        "DEFAULT": "#F57C00",
+        "light": "#FFB74D"
+      }
+    },
+    "text": {
+      "primary": "#1B3B22",
+      "secondary": "#4A5D4E",
+      "muted": "#8A9A8E",
+      "inverse": "#F9F9F6"
+    },
+    "border": {
+      "subtle": "rgba(27, 59, 34, 0.1)",
+      "focus": "#4CAF50"
+    }
+  },
+  "visual_enhancers": {
+    "surfaces": {
+      "header": "backdrop-blur-xl bg-white/70 border-b border-forest-900/10",
+      "card_marketing": "bg-white rounded-2xl border border-forest-900/10 shadow-[0_8px_32px_rgba(27,59,34,0.04)]",
+      "card_dashboard": "bg-white rounded-xl border border-forest-900/10 shadow-sm",
+      "image_treatment": "clipped frames with subtle 1px border-forest-900/10, inner shadow"
+    },
+    "motion": {
+      "hero_reveal": "Masked line-by-line text reveal on load using Framer Motion (initial y: 100%, opacity: 0, animate y: 0, opacity: 1, transition: cubic-bezier).",
+      "scroll_momentum": "Use Lenis for smooth momentum scrolling.",
+      "parallax": "Subtle y-axis translate on hero images based on scroll position.",
+      "marquee": "Slow, smooth editorial marquee running continuously across the screen.",
+      "hover": "Buttons and cards lift slightly (-translate-y-1) with increased shadow and subtle border color change."
+    }
+  },
+  "layouts": {
+    "marketing": {
+      "hero": "Full height (min-h-screen) with massive kinetic typography and a beautifully clipped product image (orchard / weather station).",
+      "manifesto": "Numbered editorial chapters (01, 02, 03). Use asymmetric CSS grid layout. Alternate left/right alignment with generous negative space.",
+      "marquee": "Full-width editorial marquee strip with large uppercase text.",
+      "pricing": "Bento-style 3-column grid for Free Trial, Annual, and Lifetime. Highlight the Lifetime tier with a subtle glowing tracing beam effect."
+    },
+    "dashboard": {
+      "structure": "Sidebar navigation (w-64) + Main content area.",
+      "grid": "High-density Bento grid for weather stats (Temp, Humidity, Rain, Wind).",
+      "spacing": "Tight gaps (gap-4 or gap-6) for data correlation. Full pixel utilization."
+    }
+  },
+  "components": {
+    "buttons": "Pill-shaped (rounded-full) for marketing, standard rounded (rounded-lg) for dashboard. High contrast text.",
+    "charts": "Use Recharts or Shadcn charts for Ecowitt weather data (line charts for temperature/humidity trends).",
+    "inputs": "Shadcn UI inputs customized with light background and focus:ring-leaf-DEFAULT.",
+    "toasts": "Sonner for notifications (e.g., 'Consiglio AI generato', 'Stazione meteo sincronizzata')."
+  },
+  "image_urls": {
+    "hero_orchard": {
+      "url": "https://images.unsplash.com/photo-1727120279660-5c28b8461609?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxmcnVpdCUyMG9yY2hhcmR8ZW58MHx8fHwxNzg0MjcyODUxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Apple orchard background for hero section"
+    },
+    "weather_station": {
+      "url": "https://images.unsplash.com/photo-1629204120289-3cb6c195ddde?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzN8MHwxfHNlYXJjaHw0fHx3ZWF0aGVyJTIwc3RhdGlvbnxlbnwwfHx8fDE3ODQyNzI4NTF8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Weather station for Ecowitt integration section"
+    },
+    "farmer_app": {
+      "url": "https://images.unsplash.com/photo-1599591520443-e5045e52d4e6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDV8MHwxfHNlYXJjaHwyfHxzbWFydCUyMGFncmljdWx0dXJlJTIwdGFibGV0fGVufDB8fHx8MTc4NDI3Mjg1Mnww&ixlib=rb-4.1.0&q=85",
+      "description": "Farmer holding tablet to showcase the app usage"
+    },
+    "fruits_detail": {
+      "url": "https://images.unsplash.com/photo-1683110752705-f474b57bebc6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHw0fHxmcnVpdCUyMG9yY2hhcmR8ZW58MHx8fHwxNzg0MjcyODUxfDA&ixlib=rb-4.1.0&q=85",
+      "description": "Close up of oranges for phenological phases section"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Build the application using React, Tailwind CSS, Framer Motion, and Recharts.",
+    "Language MUST be Italian. 'Il Tuo Frutteto, Guidato dalla Natura e dai Dati.'",
+    "Implement routing to switch between the Marketing Landing Page and the App Dashboard demo.",
+    "In the Marketing Page, use 'Lenis' for smooth scrolling.",
+    "Implement the signature on-load hero text reveal using Framer Motion (masked text effect).",
+    "Ensure generous spacing on the marketing page (p-12, p-24) to achieve the editorial Awwwards aesthetic.",
+    "In the Dashboard, implement a clean, dense bento grid for the Ecowitt weather data and plant management.",
+    "Do not use generic 'Inter' for headings. Apply 'Cabinet Grotesk' for primary headings and 'Cormorant Garamond' for elegant serif accents (e.g., quotes, chapter numbers).",
+    "All interactive elements MUST have a data-testid attribute."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Never use generic centered layouts or simplistic gradients.",
+    "Create depth through layered design elements and z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters for sticky headers.",
+    "Avoid applying universal transitions like 'transition: all'. Add specific transitions.",
+    "Do not center align the main App container.",
+    "Incorporate hover states, micro-animations, and entrance animations for all lists and buttons.",
+    "Use 2-3x more spacing than feels comfortable for marketing sections."
+  ]
+}
