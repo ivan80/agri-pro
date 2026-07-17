@@ -14,7 +14,7 @@ const nav = [
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const doLogout = async () => { await logout(); toast.success("Disconnesso"); navigate("/"); };
+  const doLogout = async () => { navigate("/"); await logout(); toast.success("Disconnesso"); };
 
   return (
     <div className="min-h-screen flex bg-[#F9F9F6]">
