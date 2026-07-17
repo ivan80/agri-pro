@@ -1,117 +1,182 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, Sprout, X } from "lucide-react";
+import { Plus, Trash2, X, Sparkles, Check, GitBranch } from "lucide-react";
 import { toast } from "sonner";
 import { api, formatApiErrorDetail } from "@/lib/api";
-
-const PHASES = ["riposo", "gemme", "fioritura", "allegagione", "accrescimento", "maturazione"];
-const empty = { name: "", species: "Melo", variety: "", planted_year: "", quantity: 1, phase: "riposo", notes: "" };
+import { RiskBadges, Empty } from "@/components/AgroUI";
 
 export default function Plants() {
   const [plants, setPlants] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(empty);
+  const [species, setSpecies] = useState([]);
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({ name: "", species: "Melo", variety: "", notes: "", emoji: "🍎" });
   const [saving, setSaving] = useState(false);
+  const [detail, setDetail] = useState(null);
 
   const load = () => api.get("/plants").then((r) => setPlants(r.data)).catch(() => {});
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+    api.get("/reference/species").then((r) => setSpecies(r.data.species)).catch(() => {});
+  }, []);
 
-  const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
+  const pickSpecies = (name) => {
+    const s = species.find((x) => x.name === name);
+    setForm({ ...form, species: name, emoji: s?.emoji || "🌳" });
+  };
 
   const save = async (e) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const payload = { ...form, quantity: Number(form.quantity) || 1, planted_year: form.planted_year ? Number(form.planted_year) : null };
-      await api.post("/plants", payload);
-      toast.success("Pianta aggiunta");
-      setForm(empty); setOpen(false); load();
-    } catch (err) {
-      toast.error(formatApiErrorDetail(err.response?.data?.detail));
-    } finally { setSaving(false); }
+      await api.post("/plants", form);
+      toast.success("Pianta aggiunta con fasi fenologiche generate");
+      setForm({ name: "", species: "Melo", variety: "", notes: "", emoji: "🍎" });
+      setAddOpen(false); load();
+    } catch (err) { toast.error(formatApiErrorDetail(err.response?.data?.detail)); }
+    finally { setSaving(false); }
   };
 
-  const del = async (id) => {
-    await api.delete(`/plants/${id}`);
-    toast.success("Pianta rimossa");
-    load();
-  };
+  const del = async (id) => { await api.delete(`/plants/${id}`); toast.success("Pianta rimossa"); load(); };
 
   return (
     <div>
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-citrus mb-2">Frutteto</p>
-          <h1 className="font-display font-black tracking-tighter text-4xl text-forest-900">Le tue piante</h1>
+          <h1 className="font-display font-black tracking-tighter text-4xl text-forest-900">Piante & Fasi</h1>
         </div>
-        <button data-testid="add-plant-btn" onClick={() => setOpen(true)} className="rounded-full bg-forest-900 text-white font-semibold px-5 py-3 flex items-center gap-2 hover:-translate-y-0.5 transition-transform">
+        <button data-testid="add-plant-btn" onClick={() => setAddOpen(true)} className="rounded-full bg-forest-900 text-white font-semibold px-5 py-3 flex items-center gap-2 hover:-translate-y-0.5 transition-transform">
           <Plus className="w-4 h-4" /> Aggiungi pianta
         </button>
       </div>
 
       {plants.length === 0 ? (
-        <div className="mt-12 rounded-2xl border border-dashed border-forest-900/20 p-16 text-center">
-          <Sprout className="w-10 h-10 text-leaf mx-auto mb-4" />
-          <p className="text-forest-700/70">Nessuna pianta ancora. Aggiungi la prima del tuo frutteto misto.</p>
-        </div>
+        <div className="mt-10"><Empty icon={GitBranch} text="Frutteto vuoto. Aggiungi la prima pianta: le fasi fenologiche (scala BBCH) verranno generate in automatico." /></div>
       ) : (
         <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {plants.map((p, i) => (
-            <motion.div key={p.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-              data-testid="plant-card" className="group rounded-xl border border-forest-900/10 bg-white p-5 hover:shadow-lg transition-shadow">
+            <motion.div key={p.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+              data-testid="plant-card" onClick={() => setDetail(p)}
+              className="group cursor-pointer rounded-xl border border-forest-900/10 bg-white p-5 hover:shadow-lg hover:-translate-y-0.5 transition-[transform,box-shadow]">
               <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-display font-bold text-lg text-forest-900">{p.name}</div>
-                  <div className="text-sm text-forest-700/60">{p.species}{p.variety ? ` · ${p.variety}` : ""}</div>
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl">{p.emoji}</span>
+                  <div>
+                    <div className="font-display font-bold text-lg text-forest-900">{p.name}</div>
+                    <div className="text-sm text-forest-700/60">{p.species}{p.variety ? ` · ${p.variety}` : ""}</div>
+                  </div>
                 </div>
-                <button data-testid="delete-plant" onClick={() => del(p.id)} className="text-forest-700/30 hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
+                <button data-testid="delete-plant" onClick={(e) => { e.stopPropagation(); del(p.id); }} className="text-forest-700/30 hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
               </div>
-              <div className="mt-4 flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-leaf/15 text-forest-800 rounded-full px-2.5 py-1">{p.phase}</span>
-                <span className="text-[10px] font-mono-tech text-forest-700/50">×{p.quantity}</span>
-                {p.planted_year && <span className="text-[10px] font-mono-tech text-forest-700/50">dal {p.planted_year}</span>}
+              <div className="mt-4 rounded-lg bg-[#F9F9F6] p-3">
+                <div className="text-[11px] text-forest-700/50 mb-1">Fase attuale</div>
+                <div className="font-semibold text-forest-900 text-sm mb-2">{p.current_phase?.phase_name || "—"}</div>
+                <RiskBadges fungal={p.current_phase?.risk_fungal} insect={p.current_phase?.risk_insect} acarid={p.current_phase?.risk_acarid} />
               </div>
-              {p.notes && <p className="mt-3 text-sm text-forest-700/70">{p.notes}</p>}
             </motion.div>
           ))}
         </div>
       )}
 
       <AnimatePresence>
-        {open && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-forest-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-            <motion.form initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()} onSubmit={save} data-testid="plant-form"
-              className="w-full max-w-lg bg-white rounded-2xl p-6 max-h-[90vh] overflow-y-auto">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="font-display font-bold text-xl text-forest-900">Nuova pianta</h2>
-                <button type="button" onClick={() => setOpen(false)}><X className="w-5 h-5 text-forest-700" /></button>
-              </div>
+        {addOpen && (
+          <Modal onClose={() => setAddOpen(false)}>
+            <form onSubmit={save} data-testid="plant-form">
+              <ModalHead title="Nuova pianta" onClose={() => setAddOpen(false)} />
               <div className="space-y-3">
-                <input data-testid="plant-name" required placeholder="Nome (es. Melo del vialetto)" value={form.name} onChange={set("name")} className="w-full rounded-xl border border-forest-900/15 px-4 py-2.5 outline-none focus:ring-2 focus:ring-leaf" />
+                <input data-testid="plant-name" required placeholder="Nome (es. Melo del vialetto)" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="inp" />
                 <div className="grid grid-cols-2 gap-3">
-                  <select data-testid="plant-species" value={form.species} onChange={set("species")} className="rounded-xl border border-forest-900/15 px-4 py-2.5 bg-white outline-none focus:ring-2 focus:ring-leaf">
-                    {["Melo", "Pero", "Susino", "Ciliegio", "Albicocco", "Pesco", "Agrume", "Fico", "Kaki", "Altro"].map((s) => <option key={s}>{s}</option>)}
+                  <select data-testid="plant-species" value={form.species} onChange={(e) => pickSpecies(e.target.value)} className="inp bg-white">
+                    {species.map((s) => <option key={s.name} value={s.name}>{s.emoji} {s.name}</option>)}
                   </select>
-                  <input data-testid="plant-variety" placeholder="Varietà" value={form.variety} onChange={set("variety")} className="rounded-xl border border-forest-900/15 px-4 py-2.5 outline-none focus:ring-2 focus:ring-leaf" />
+                  <input data-testid="plant-variety" placeholder="Varietà" value={form.variety} onChange={(e) => setForm({ ...form, variety: e.target.value })} className="inp" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <input data-testid="plant-year" type="number" placeholder="Anno impianto" value={form.planted_year} onChange={set("planted_year")} className="rounded-xl border border-forest-900/15 px-4 py-2.5 outline-none focus:ring-2 focus:ring-leaf" />
-                  <input data-testid="plant-qty" type="number" min="1" placeholder="Quantità" value={form.quantity} onChange={set("quantity")} className="rounded-xl border border-forest-900/15 px-4 py-2.5 outline-none focus:ring-2 focus:ring-leaf" />
-                </div>
-                <select data-testid="plant-phase" value={form.phase} onChange={set("phase")} className="w-full rounded-xl border border-forest-900/15 px-4 py-2.5 bg-white outline-none focus:ring-2 focus:ring-leaf">
-                  {PHASES.map((p) => <option key={p} value={p}>{p}</option>)}
-                </select>
-                <textarea data-testid="plant-notes" placeholder="Note (portainnesto, posizione…)" value={form.notes} onChange={set("notes")} className="w-full rounded-xl border border-forest-900/15 px-4 py-2.5 outline-none focus:ring-2 focus:ring-leaf" rows={2} />
+                <textarea data-testid="plant-notes" placeholder="Note (portainnesto, posizione…)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="inp" rows={2} />
+                <p className="text-xs text-forest-700/50">Le fasi fenologiche BBCH per «{form.species}» saranno generate automaticamente.</p>
               </div>
               <button data-testid="save-plant" disabled={saving} className="mt-5 w-full rounded-full bg-citrus text-white font-semibold py-3 hover:-translate-y-0.5 transition-transform disabled:opacity-60">
                 {saving ? "Salvataggio…" : "Salva pianta"}
               </button>
-            </motion.form>
-          </motion.div>
+            </form>
+          </Modal>
         )}
+        {detail && <PlantDetail plant={detail} onClose={() => setDetail(null)} onChanged={load} />}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function PlantDetail({ plant, onClose, onChanged }) {
+  const [phases, setPhases] = useState([]);
+  const [current, setCurrent] = useState(plant.current_phase_id);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const load = () => api.get(`/plants/${plant.id}/phases`).then((r) => setPhases(r.data)).catch(() => {});
+  useEffect(() => { load(); }, []);
+
+  const setPhase = async (phaseId) => {
+    setCurrent(phaseId);
+    await api.post(`/plants/${plant.id}/phase`, { phase_id: phaseId });
+    toast.success("Fase corrente aggiornata");
+    onChanged();
+  };
+
+  const genAI = async () => {
+    setAiLoading(true);
+    try {
+      const { data } = await api.post(`/plants/${plant.id}/generate-phases`);
+      toast.success(`${data.count} fasi rigenerate con AI`);
+      load(); onChanged();
+    } catch (e) { toast.error("Generazione AI non riuscita"); }
+    finally { setAiLoading(false); }
+  };
+
+  return (
+    <Modal onClose={onClose} wide>
+      <ModalHead title={`${plant.emoji} ${plant.name}`} onClose={onClose} />
+      <div className="flex items-center justify-between mb-3">
+        <p className="text-sm text-forest-700/60">{plant.species}{plant.variety ? ` · ${plant.variety}` : ""} — Fasi fenologiche (BBCH)</p>
+        <button data-testid="ai-phases-btn" onClick={genAI} disabled={aiLoading} className="rounded-full border border-forest-900/15 text-sm px-3 py-1.5 flex items-center gap-1.5 hover:border-citrus hover:text-citrus transition-colors disabled:opacity-60">
+          <Sparkles className="w-3.5 h-3.5" /> {aiLoading ? "Genero…" : "Rigenera con AI"}
+        </button>
+      </div>
+      <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">
+        {phases.map((ph) => (
+          <button key={ph.id} data-testid="phase-row" onClick={() => setPhase(ph.id)}
+            className={`w-full text-left rounded-lg border p-3 transition-colors ${current === ph.id ? "border-leaf bg-leaf/5" : "border-forest-900/10 hover:bg-secondary"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="font-mono-tech text-xs text-forest-700/40 w-5">{ph.phase_code}</span>
+                <span className="font-semibold text-forest-900 text-sm truncate">{ph.phase_name}</span>
+                {current === ph.id && <Check className="w-4 h-4 text-leaf shrink-0" />}
+              </div>
+              <RiskBadges fungal={ph.risk_fungal} insect={ph.risk_insect} acarid={ph.risk_acarid} />
+            </div>
+            <p className="text-xs text-forest-700/60 mt-1 ml-7">{ph.description}</p>
+          </button>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+export function Modal({ children, onClose, wide }) {
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 bg-forest-900/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+      <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, opacity: 0 }}
+        onClick={(e) => e.stopPropagation()} className={`w-full ${wide ? "max-w-2xl" : "max-w-lg"} bg-white rounded-2xl p-6 max-h-[90vh] overflow-y-auto`}>
+        {children}
+      </motion.div>
+    </motion.div>
+  );
+}
+
+export function ModalHead({ title, onClose }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <h2 className="font-display font-bold text-xl text-forest-900">{title}</h2>
+      <button type="button" onClick={onClose}><X className="w-5 h-5 text-forest-700" /></button>
     </div>
   );
 }

@@ -68,5 +68,15 @@ body {
 
 .glass { backdrop-filter: blur(18px); background: rgba(255,255,255,0.72); }
 
+.inp {
+  width: 100%;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(27,59,34,0.15);
+  padding: 0.625rem 1rem;
+  outline: none;
+  background: #fff;
+}
+.inp:focus { box-shadow: 0 0 0 2px #4CAF50; }
+
 html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto !important; }

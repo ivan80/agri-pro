@@ -7,9 +7,13 @@ import Auth from "@/pages/Auth";
 import DashboardLayout from "@/pages/dashboard/DashboardLayout";
 import Overview from "@/pages/dashboard/Overview";
 import Plants from "@/pages/dashboard/Plants";
+import Products from "@/pages/dashboard/Products";
+import Treatments from "@/pages/dashboard/Treatments";
+import Recommendations from "@/pages/dashboard/Recommendations";
+import Alerts from "@/pages/dashboard/Alerts";
 import Weather from "@/pages/dashboard/Weather";
 import Advisor from "@/pages/dashboard/Advisor";
-import PhasesPage from "@/pages/dashboard/PhasesPage";
+import Settings from "@/pages/dashboard/Settings";
 
 function Protected({ children }) {
   const { user, checked } = useAuth();
@@ -29,9 +33,13 @@ function App() {
             <Route path="/app" element={<Protected><DashboardLayout /></Protected>}>
               <Route index element={<Overview />} />
               <Route path="piante" element={<Plants />} />
+              <Route path="prodotti" element={<Products />} />
+              <Route path="trattamenti" element={<Treatments />} />
+              <Route path="raccomandazioni" element={<Recommendations />} />
+              <Route path="alert" element={<Alerts />} />
               <Route path="meteo" element={<Weather />} />
-              <Route path="fasi" element={<PhasesPage />} />
               <Route path="assistente" element={<Advisor />} />
+              <Route path="impostazioni" element={<Settings />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
