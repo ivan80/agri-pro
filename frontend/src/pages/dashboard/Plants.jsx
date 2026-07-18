@@ -110,15 +110,27 @@ function PlantDetail({ plant, onClose, onChanged }) {
   const [phases, setPhases] = useState([]);
   const [current, setCurrent] = useState(plant.current_phase_id);
   const [aiLoading, setAiLoading] = useState(false);
+  const [advice, setAdvice] = useState(null);
+  const [adviceLoading, setAdviceLoading] = useState(false);
 
   const load = () => api.get(`/plants/${plant.id}/phases`).then((r) => setPhases(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
 
   const setPhase = async (phaseId) => {
     setCurrent(phaseId);
+    setAdvice(null);
     await api.post(`/plants/${plant.id}/phase`, { phase_id: phaseId });
     toast.success("Fase corrente aggiornata");
     onChanged();
+  };
+
+  const getAdvice = async () => {
+    setAdviceLoading(true);
+    try {
+      const { data } = await api.post(`/plants/${plant.id}/phase-advice`);
+      setAdvice(data.advice);
+    } catch (e) { toast.error(formatApiErrorDetail(e.response?.data?.detail)); }
+    finally { setAdviceLoading(false); }
   };
 
   const genAI = async () => {
@@ -131,13 +143,31 @@ function PlantDetail({ plant, onClose, onChanged }) {
     finally { setAiLoading(false); }
   };
 
+  const currentPhase = phases.find((p) => p.id === current);
+
   return (
     <Modal onClose={onClose} wide>
       <ModalHead title={`${plant.emoji} ${plant.name}`} onClose={onClose} />
+
+      <div className="rounded-xl bg-forest-900 text-white p-4 mb-4">
+        <div className="text-[10px] uppercase tracking-widest text-white/50 mb-1">Fase corrente</div>
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="font-display font-bold text-lg">{currentPhase?.phase_name || "—"}</div>
+          <RiskBadges fungal={currentPhase?.risk_fungal} insect={currentPhase?.risk_insect} acarid={currentPhase?.risk_acarid} />
+        </div>
+        <button data-testid="phase-advice-btn" onClick={getAdvice} disabled={adviceLoading || !current}
+          className="mt-3 rounded-full bg-citrus text-white text-sm font-semibold px-4 py-2 flex items-center gap-2 hover:-translate-y-0.5 transition-transform disabled:opacity-60">
+          <Sparkles className="w-4 h-4" /> {adviceLoading ? "Elaboro consigli…" : "Consigli di trattamento AI per questa fase"}
+        </button>
+        {advice && (
+          <div data-testid="phase-advice-text" className="mt-3 rounded-lg bg-white text-forest-900 p-4 text-sm whitespace-pre-wrap leading-relaxed">{advice}</div>
+        )}
+      </div>
+
       <div className="flex items-center justify-between mb-3">
-        <p className="text-sm text-forest-700/60">{plant.species}{plant.variety ? ` · ${plant.variety}` : ""} — Fasi fenologiche (BBCH)</p>
+        <p className="text-sm text-forest-700/60">{plant.species}{plant.variety ? ` · ${plant.variety}` : ""} — Seleziona la fase attuale</p>
         <button data-testid="ai-phases-btn" onClick={genAI} disabled={aiLoading} className="rounded-full border border-forest-900/15 text-sm px-3 py-1.5 flex items-center gap-1.5 hover:border-citrus hover:text-citrus transition-colors disabled:opacity-60">
-          <Sparkles className="w-3.5 h-3.5" /> {aiLoading ? "Genero…" : "Rigenera con AI"}
+          <Sparkles className="w-3.5 h-3.5" /> {aiLoading ? "Genero…" : "Rigenera fasi con AI"}
         </button>
       </div>
       <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-1">

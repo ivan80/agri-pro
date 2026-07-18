@@ -662,6 +662,39 @@ async def ai_generate_phases(plant_id: str, user: dict = Depends(get_current_use
     return {"ok": True, "count": len(phases)}
 
 
+@api.post("/plants/{plant_id}/phase-advice")
+async def phase_advice(plant_id: str, user: dict = Depends(get_current_user)):
+    from emergentintegrations.llm.chat import LlmChat, UserMessage
+    p = await db.plants.find_one({"_id": oid(plant_id), "user_id": user["id"]})
+    if not p:
+        raise HTTPException(404, "Pianta non trovata")
+    if not p.get("current_phase_id"):
+        raise HTTPException(400, "Imposta prima la fase corrente della pianta")
+    ph = await db.phases.find_one({"_id": oid(p["current_phase_id"])})
+    if not ph:
+        raise HTTPException(404, "Fase non trovata")
+    products = await db.products.find({"user_id": user["id"], "active": True, "in_stock": True}).to_list(200)
+    prod_list = ", ".join(f"{x['name']} ({x['category']})" for x in products) or "nessuno (magazzino vuoto)"
+    system = ("Sei un agronomo esperto in frutticoltura e difesa integrata. Rispondi in italiano, "
+              "pratico e sintetico. Dai consigli di TRATTAMENTO concreti per la fase fenologica indicata: "
+              "cosa monitorare, quali principi attivi/categorie usare (rame, zolfo, fungicidi, insetticidi, "
+              "Neem, acaricidi), tempistica e precauzioni (es. no trattamenti in fioritura). "
+              "Se ci sono prodotti in magazzino, indica quali usare tra quelli. Usa punti elenco brevi. Max 180 parole.")
+    prompt = (f"Pianta: {p['name']} ({p['species']} {p.get('variety','')}). "
+              f"Fase fenologica attuale: «{ph['phase_name']}» — {ph.get('description','')}. "
+              f"Rischi (0-3): fungino {ph['risk_fungal']}, insetti {ph['risk_insect']}, acari {ph['risk_acarid']}. "
+              f"Prodotti disponibili in magazzino: {prod_list}. "
+              f"Che trattamenti consigli in questa fase?")
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"advice-{plant_id}",
+                   system_message=system).with_model("anthropic", "claude-sonnet-4-6")
+    try:
+        reply = await chat.send_message(UserMessage(text=prompt))
+    except Exception as e:
+        logger.error("phase advice error: %s", e)
+        raise HTTPException(502, "Consiglio AI non disponibile")
+    return {"advice": reply, "phase": clean(ph)}
+
+
 @api.post("/ai/advisor")
 async def advisor(body: AdvisorIn, user: dict = Depends(get_current_user)):
     from emergentintegrations.llm.chat import LlmChat, UserMessage

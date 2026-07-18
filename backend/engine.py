@@ -13,6 +13,12 @@ CATEGORY_FOR_RISK = {
     "acarid": ["acaricida"],
 }
 
+SUGGESTION = {
+    "fungal": "Consigliato trattamento preventivo con rame o fungicida specifico.",
+    "insect": "Consigliato insetticida selettivo o olio di Neem.",
+    "acarid": "Consigliato acaricida od olio minerale (contro ragnetto rosso).",
+}
+
 
 def iso_now():
     return datetime.now(timezone.utc).isoformat()
@@ -207,8 +213,9 @@ async def generate_phase_recommendations(db, user_id, reading, cfg):
                     f"applicare {chosen['name']}.", code, priority)
             else:
                 created = await _add_rec(db, user_id, str(pl["_id"]), None,
-                    f"{REASON[code]} (livello {effective}/3) in fase «{ph['phase_name']}» "
-                    f"su {pl['name']}: nessun prodotto compatibile in magazzino. Configurane uno.",
+                    f"{REASON[code]} livello {effective}/3 in fase «{ph['phase_name']}» su "
+                    f"{pl['name']}. {SUGGESTION[kind]} (Aggiungi il prodotto in magazzino "
+                    f"o chiedi all'Assistente AI.)",
                     code, priority)
             if created:
                 count += 1

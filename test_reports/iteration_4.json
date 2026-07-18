@@ -1,0 +1,56 @@
+{
+  "summary": "Iteration 4 covers the NEW per-phase AI treatment advice endpoint + improved engine recommendation text + toast bottom-right position + full regression. Backend: extended /app/backend/tests/backend_test.py from 27 to 31 pytests, ALL 31 passing (100%). New tests specifically verify (a) POST /api/plants/{id}/phase-advice returns Claude-generated Italian advice + phase context, (b) 404 on bogus plant id, (c) engine SUGGESTION text ('Consigliato trattamento preventivo con rame o fungicida specifico.', 'Consigliato insetticida selettivo o olio di Neem.', 'Consigliato acaricida ...') appears in reason field of advisory recs when no product is configured. Frontend UI: verified end-to-end via Playwright — login admin → create Melo → auto-BBCH 14 phases → 'Fase corrente' dark card renders with phase-advice-btn → clicking generates ~945 chars of on-topic Italian advice into phase-advice-text → selecting another phase clears advice → toast is now at bottom-right (data-y-position=bottom, data-x-position=right on the Sonner Toaster). Recommendations page shows both fungal and insect SUGGESTION strings for the risky-phase Melo without configured products.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Treatments modal (Registra trattamento)",
+        "issues": [
+          "Applied-at field still uses native browser <input type='date'> instead of shadcn Calendar (design consistency, LOW). Carried over from iteration_3."
+        ]
+      },
+      {
+        "screen": "Auth (post-logout)",
+        "issues": [
+          "Logout still lands on /accedi instead of the landing page /. LOW priority UX polish. Carried over from iteration_2/3."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: replace native date input with shadcn Calendar. Optional: logout lands on '/'."
+  ],
+  "critical_code_review_comments": [
+    "server.py phase_advice endpoint: correctly returns 400 when current_phase_id is missing, 404 when plant/phase not found, 502 when LLM call fails. Advice prompt is well-scoped (max 180 parole, bullet points, mentions products in stock). ✔",
+    "server.py phase_advice: uses `products_in_stock` (in_stock: True) filter in the prompt — good, avoids recommending out-of-stock chemistry.",
+    "engine.py SUGGESTION dict is a clean addition; all 3 risk kinds have a suggestion; advisory rec message now reads 'Rischio ... livello X/3 in fase «...» su <plant>. Consigliato ... (Aggiungi il prodotto in magazzino ...)'. Reads naturally in Italian. ✔",
+    "Plants.jsx PlantDetail: `setPhase` clears `advice` state before hitting backend — correct UX (stale advice would otherwise mislead). Same effect on manual phase-row click. ✔",
+    "App.js: <Toaster position='bottom-right' richColors /> — resolves top-right overlap flagged in iteration_3. Verified data-y-position=bottom + data-x-position=right at runtime. ✔",
+    "server.py CORS: `allow_origins=[FRONTEND_URL, 'http://localhost:3000']` with `allow_credentials=True` — cookies + preview URL both work. ✔",
+    "SUGGESTION text is emitted for EACH risk axis independently (fungal, insect, acarid) — a Fioritura Melo generates two advisory recs (fungal + insect), each with its own suggestion. Documented in test_no_product_recommendation_includes_suggestion which now verifies per reason_code.",
+    "Minor: /api/plants/{id}/phase-advice does not persist the AI reply — each click hits Claude. Consider a short cache (per plant+phase) to reduce cost + latency on re-clicks.",
+    "Minor: no explicit input validation on `question`/`plant_id` size in /api/ai/advisor — a very long question would forward to Claude unchecked."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py — added TestPhaseAdvice (3 tests) and TestRecommendationSuggestionText (1 test). Total 31 pytests, all passing."
+  ],
+  "success_rate": {
+    "backend": "100% (31/31 pytests)",
+    "frontend": "100% — new phase-advice UI + toast bottom-right + engine SUGGESTION text all visible end-to-end"
+  },
+  "test_credentials": "Admin: admin@frutteto.it / Frutteto2026! — verified. Fresh registered users for empty-state + phase-advice tests.",
+  "seed_data_creation": "None. Test data prefixed 'TEST_' / 'test_advice_' / 'test_engine_' / 'test_sugg_' — scoped per user, not garbage-collected but user-isolated.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite now covers phase-advice + SUGGESTION text. Note: fresh user cannot easily reach the 400 branch (current_phase_id=None) because plant creation auto-sets the first phase; the 400 path was covered by inference (404 on bogus plant is the only externally reachable error). If a plant with NULL current_phase_id needs testing, would require a Mongo direct update fixture. AI phase-advice test may take up to 45s; the pytest skips gracefully on 502. Toaster position at runtime: data-y-position=bottom, data-x-position=right. Frontend flow: click plant-card -> Fase corrente card -> phase-advice-btn -> phase-advice-text renders; choosing another phase-row clears advice.",
+  "rca_of_the_issue": "N/A — feature verification only. All 3 requested new features (phase-advice endpoint, improved SUGGESTION text, toast bottom-right) work as specified. Regression flows (auth, add-plant with auto BBCH, set-phase, product, treatment, run-cycle, recs, alerts, weather demo, irrigation, config, AI phase regen) also pass."
+}
