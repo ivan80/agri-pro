@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Save, Radio, SlidersHorizontal } from "lucide-react";
+import { Save, Radio, SlidersHorizontal, MapPin, LocateFixed } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 
@@ -33,12 +33,44 @@ export default function Settings() {
     finally { setSaving(false); }
   };
 
+  const detectLocation = () => {
+    if (!navigator.geolocation) { toast.error("Geolocalizzazione non supportata dal browser"); return; }
+    toast.info("Rilevamento posizione…");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setCfg((c) => ({ ...c, latitude: pos.coords.latitude.toFixed(4), longitude: pos.coords.longitude.toFixed(4) }));
+        toast.success("Posizione rilevata: salva per confermare");
+      },
+      () => toast.error("Impossibile rilevare la posizione. Inseriscila manualmente."),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
   return (
     <div className="max-w-3xl">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-citrus mb-2">Sistema</p>
       <h1 className="font-display font-black tracking-tighter text-4xl text-forest-900">Impostazioni</h1>
 
       <div className="mt-8 rounded-xl border border-forest-900/10 bg-white p-6">
+        <div className="flex items-center gap-2 mb-1"><MapPin className="w-5 h-5 text-leaf" /><h3 className="font-display font-bold text-forest-900">Posizione del frutteto</h3></div>
+        <p className="text-sm text-forest-700/70 mb-4">Se non hai una stazione Ecowitt, il meteo viene scaricato in base alla posizione (via Open-Meteo, senza chiavi).</p>
+        <div className="grid grid-cols-2 gap-3">
+          <input data-testid="cfg-lat" placeholder="Latitudine" value={cfg.latitude || ""} onChange={set("latitude")} className="inp" />
+          <input data-testid="cfg-lon" placeholder="Longitudine" value={cfg.longitude || ""} onChange={set("longitude")} className="inp" />
+        </div>
+        <input data-testid="cfg-locname" placeholder="Località (es. Ponzano Veneto)" value={cfg.location_name || ""} onChange={set("location_name")} className="inp mt-3" />
+        <div className="mt-4 flex gap-2 flex-wrap">
+          <button data-testid="detect-location" type="button" onClick={detectLocation} className="rounded-full border border-forest-900/15 px-4 py-2.5 text-sm font-semibold flex items-center gap-2 hover:border-leaf transition-colors">
+            <LocateFixed className="w-4 h-4" /> Usa la mia posizione
+          </button>
+          <button data-testid="save-location" onClick={() => save(["latitude", "longitude", "location_name"])} disabled={saving}
+            className="rounded-full bg-leaf text-white font-semibold px-5 py-2.5 flex items-center gap-2 hover:-translate-y-0.5 transition-transform disabled:opacity-60">
+            <Save className="w-4 h-4" /> Salva posizione
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-4 rounded-xl border border-forest-900/10 bg-white p-6">
         <div className="flex items-center gap-2 mb-1"><Radio className="w-5 h-5 text-sky" /><h3 className="font-display font-bold text-forest-900">Stazione Ecowitt</h3></div>
         <p className="text-sm text-forest-700/70 mb-4">Chiavi dal tuo account Ecowitt (Dashboard → API Management) e MAC del dispositivo. Senza chiavi il meteo resta in modalità demo.</p>
         <div className="space-y-3">

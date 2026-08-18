@@ -36,7 +36,7 @@ export default function Weather() {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.2em] text-sky mb-2">Stazione meteo</p>
           <h1 className="font-display font-black tracking-tighter text-4xl text-forest-900">Meteo & Ecowitt</h1>
-          {w && <p className="text-sm text-forest-700/60 mt-2">Sorgente: <span className={`font-mono-tech ${w.source === "ecowitt" ? "text-leaf" : "text-citrus"}`}>{w.source === "ecowitt" ? "DATI REALI" : "MODALITÀ DEMO"}</span></p>}
+          {w && <p className="text-sm text-forest-700/60 mt-2">Sorgente: <span className={`font-mono-tech ${w.source === "demo" ? "text-citrus" : "text-leaf"}`}>{w.source === "ecowitt" ? "ECOWITT (REALE)" : w.source === "open-meteo" ? "OPEN-METEO (POSIZIONE)" : "MODALITÀ DEMO"}</span></p>}
         </div>
         <div className="flex gap-2">
           <button data-testid="weather-refresh" onClick={load} className="rounded-full border border-forest-900/15 p-3 hover:border-sky transition-colors"><RefreshCw className={`w-4 h-4 text-forest-800 ${loading ? "animate-spin" : ""}`} /></button>

@@ -10,7 +10,7 @@ const CAT_COLORS = { rame: "#b45309", fungicida: "#0288D1", zolfo: "#eab308", in
   acaricida: "#9333ea", corroborante: "#4CAF50", correttore: "#0ea5e9", fertilizzante: "#16a34a", ammendante: "#78716c" };
 
 const empty = { name: "", active_ingredient: "", category: "fungicida", persistence_days: 7,
-  carenza_days: 0, dose_per_hl: "", dose_unit: "g", leaching_threshold_mm: 15, notes: "", in_stock: true };
+  carenza_days: 0, dose_per_l: "", dose_unit: "g", leaching_threshold_mm: 15, notes: "", in_stock: true };
 
 export default function Products() {
   const [products, setProducts] = useState([]);
@@ -33,7 +33,7 @@ export default function Products() {
     try {
       const payload = { ...form, persistence_days: Number(form.persistence_days) || 7,
         carenza_days: Number(form.carenza_days) || 0, leaching_threshold_mm: Number(form.leaching_threshold_mm) || 15,
-        dose_per_hl: form.dose_per_hl ? Number(form.dose_per_hl) : null };
+        dose_per_l: form.dose_per_l ? Number(form.dose_per_l) : null };
       await api.post("/products", payload);
       toast.success("Prodotto aggiunto");
       setForm(empty); setOpen(false); load();
@@ -108,7 +108,7 @@ export default function Products() {
                   <label className="text-xs text-forest-700/60">Dilav. (mm)<input type="number" value={form.leaching_threshold_mm} onChange={set("leaching_threshold_mm")} className="inp mt-1" /></label>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <input type="number" placeholder="Dose per hl" value={form.dose_per_hl} onChange={set("dose_per_hl")} className="inp" />
+                  <input type="number" placeholder="Dose per litro" value={form.dose_per_l} onChange={set("dose_per_l")} className="inp" />
                   <select value={form.dose_unit} onChange={set("dose_unit")} className="inp bg-white">
                     {["g", "ml", "kg", "l"].map((u) => <option key={u}>{u}</option>)}
                   </select>

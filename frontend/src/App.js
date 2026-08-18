@@ -13,6 +13,7 @@ import Recommendations from "@/pages/dashboard/Recommendations";
 import Alerts from "@/pages/dashboard/Alerts";
 import Weather from "@/pages/dashboard/Weather";
 import Advisor from "@/pages/dashboard/Advisor";
+import Fertilization from "@/pages/dashboard/Fertilization";
 import Settings from "@/pages/dashboard/Settings";
 
 function Protected({ children }) {
@@ -35,6 +36,7 @@ function App() {
               <Route path="piante" element={<Plants />} />
               <Route path="prodotti" element={<Products />} />
               <Route path="trattamenti" element={<Treatments />} />
+              <Route path="concimazioni" element={<Fertilization />} />
               <Route path="raccomandazioni" element={<Recommendations />} />
               <Route path="alert" element={<Alerts />} />
               <Route path="meteo" element={<Weather />} />

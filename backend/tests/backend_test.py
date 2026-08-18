@@ -256,7 +256,7 @@ class TestProducts:
         payload = {"name": "TEST Poltiglia Bordolese", "category": "rame",
                    "active_ingredient": "Solfato di rame",
                    "persistence_days": 10, "carenza_days": 3,
-                   "dose_per_hl": 500, "dose_unit": "g",
+                   "dose_per_l": 5, "dose_unit": "g",
                    "leaching_threshold_mm": 20, "in_stock": True,
                    "notes": "test"}
         r = s.post(f"{API}/products", json=payload, timeout=10)
@@ -653,6 +653,197 @@ class TestAI:
             assert len(phases) == d["count"]
         finally:
             admin_session.delete(f"{API}/plants/{p['id']}", timeout=10)
+
+
+# --------------------------------------------------------- NEW iter5 features
+class TestProductDosePerLiter:
+    """Product model uses dose_per_l (per liter), replacing dose_per_hl."""
+
+    def test_create_product_with_dose_per_l(self, fresh_user):
+        s, _ = fresh_user
+        payload = {"name": "TEST DosePerL Prod", "category": "fungicida",
+                   "persistence_days": 7, "carenza_days": 2,
+                   "dose_per_l": 2.5, "dose_unit": "ml",
+                   "leaching_threshold_mm": 15, "in_stock": True}
+        r = s.post(f"{API}/products", json=payload, timeout=10)
+        assert r.status_code == 200, r.text
+        prod = r.json()
+        assert prod.get("dose_per_l") == 2.5
+        assert prod.get("dose_unit") == "ml"
+        # verify persisted via GET
+        got = [p for p in s.get(f"{API}/products", timeout=10).json() if p["id"] == prod["id"]][0]
+        assert got["dose_per_l"] == 2.5
+
+
+class TestProductPrecedenceAutoMatch:
+    """(1) Registered in-stock products should be auto-matched by risk category even
+    WITHOUT a manual product-phase compatibility row."""
+
+    def test_engine_auto_matches_registered_product_by_category(self):
+        s = requests.Session()
+        email = f"test_precedence_{uuid.uuid4().hex[:8]}@frutteto.it"
+        r = s.post(f"{API}/auth/register",
+                   json={"name": "Prec T", "email": email, "password": "Passw0rd!"}, timeout=15)
+        assert r.status_code == 200
+        s.headers.update({"Authorization": f"Bearer {r.json()['token']}"})
+
+        # plant + risky phase (Fioritura, risk_fungal=3)
+        r = s.post(f"{API}/plants",
+                   json={"name": "TEST Prec Melo", "species": "Melo", "emoji": "🍎"}, timeout=15)
+        plant_id = r.json()["id"]
+        phases = s.get(f"{API}/plants/{plant_id}/phases", timeout=10).json()
+        risky = next(ph for ph in phases if ph["phase_name"] == "Fioritura")
+        s.post(f"{API}/plants/{plant_id}/phase",
+               json={"phase_id": risky["id"]}, timeout=10)
+
+        # register product with rame category, IN STOCK, but NO compatibility row
+        r = s.post(f"{API}/products",
+                   json={"name": "TEST Rame Precedence", "category": "rame",
+                         "persistence_days": 7, "carenza_days": 3,
+                         "dose_per_l": 3, "dose_unit": "g",
+                         "leaching_threshold_mm": 20, "in_stock": True}, timeout=10)
+        assert r.status_code == 200
+        prod = r.json()
+
+        # NOTE: NO POST to /api/products/{id}/compatibility
+
+        # run cycle
+        r = s.post(f"{API}/cycle/run", timeout=30)
+        assert r.status_code == 200
+        res = r.json()["result"]
+        if res["is_raining"]:
+            pytest.skip("Demo weather rolled 'raining' — engine skips rec generation")
+
+        recs = s.get(f"{API}/recommendations?status=pending", timeout=10).json()
+        mine = [rr for rr in recs if rr["plant_id"] == plant_id and rr.get("reason_code") == "FUNGAL_RISK"]
+        assert len(mine) >= 1, f"Expected a FUNGAL_RISK rec, got: {recs}"
+        rec = mine[0]
+        # Precedence: product_id MUST point to our registered product
+        assert rec.get("product_id") == prod["id"], \
+            f"Expected auto-matched product_id={prod['id']}, got {rec.get('product_id')}. Reason: {rec.get('reason')}"
+        assert "applicare" in rec["reason"].lower()
+        assert "TEST Rame Precedence" in rec["reason"]
+
+
+class TestLocationWeather:
+    """(2) When no Ecowitt, fetch weather from Open-Meteo via lat/lon config. If Open-Meteo
+    rate-limited/unreachable, gracefully fall back to demo. Both are acceptable — no 500."""
+
+    def test_weather_uses_location_or_falls_back(self, fresh_user):
+        s, _ = fresh_user
+        # Set location config (Rome). Also ensure no Ecowitt keys set.
+        r = s.put(f"{API}/config",
+                  json={"values": {"latitude": "41.9028", "longitude": "12.4964",
+                                    "location_name": "Roma, IT",
+                                    "ecowitt_app_key": "", "ecowitt_api_key": "",
+                                    "ecowitt_mac": ""}}, timeout=10)
+        assert r.status_code == 200
+        # verify persisted
+        cfg = s.get(f"{API}/config", timeout=10).json()
+        assert cfg["latitude"] == "41.9028"
+        assert cfg["location_name"] == "Roma, IT"
+
+        r = s.get(f"{API}/weather/latest", timeout=20)
+        assert r.status_code == 200, r.text
+        w = r.json()
+        # Either open-meteo (success) or demo (fallback) — both acceptable, no crash
+        assert w.get("source") in ("open-meteo", "demo"), f"Unexpected source: {w.get('source')}"
+        # Required numeric fields present
+        for k in ("temp_c", "humidity_pct", "rainfall_rate_mmh", "wind_speed_ms"):
+            assert k in w
+        # No 500, no exception; timestamp present
+        assert "timestamp" in w
+
+
+class TestFertilization:
+    """(4) Fertilization CRUD + reminder alert generation via /api/cycle/run."""
+
+    def test_fertilization_crud_and_reminder_creates_alert(self):
+        s = requests.Session()
+        email = f"test_fert_{uuid.uuid4().hex[:8]}@frutteto.it"
+        r = s.post(f"{API}/auth/register",
+                   json={"name": "Fert T", "email": email, "password": "Passw0rd!"}, timeout=15)
+        assert r.status_code == 200
+        s.headers.update({"Authorization": f"Bearer {r.json()['token']}"})
+
+        # optional: create a plant to attach the fertilization to
+        r = s.post(f"{API}/plants",
+                   json={"name": "TEST Fert Melo", "species": "Melo", "emoji": "🍎"}, timeout=15)
+        plant_id = r.json()["id"]
+
+        # POST fertilization with next_reminder_date in the PAST
+        past = (datetime_now_utc() - _timedelta_days(1)).isoformat()
+        r = s.post(f"{API}/fertilization",
+                   json={"plant_id": plant_id, "ftype": "Stallatico",
+                         "product_name": "Stallatico pellettato",
+                         "dose": "2 kg/pianta",
+                         "next_reminder_date": past,
+                         "notes": "TEST reminder due"}, timeout=10)
+        assert r.status_code == 200, r.text
+        fert = r.json()
+        assert fert["ftype"] == "Stallatico"
+        fert_id = fert["id"]
+
+        # GET list includes plant_name
+        lst = s.get(f"{API}/fertilization", timeout=10).json()
+        assert isinstance(lst, list)
+        got = [f for f in lst if f["id"] == fert_id]
+        assert len(got) == 1
+        assert got[0]["plant_name"] == "TEST Fert Melo"
+
+        # Run cycle -> fertilization_reminders should be >= 1
+        r = s.post(f"{API}/cycle/run", timeout=30)
+        assert r.status_code == 200
+        res = r.json()["result"]
+        assert "fertilization_reminders" in res
+        assert res["fertilization_reminders"] >= 1, f"Expected >=1 reminder. Got: {res}"
+
+        # An alert of type 'fertilization' should exist
+        alerts = s.get(f"{API}/alerts", timeout=10).json()
+        fert_alerts = [a for a in alerts if a.get("type") == "fertilization"]
+        assert len(fert_alerts) >= 1, f"No fertilization alert. Alerts: {alerts}"
+        msg = fert_alerts[0]["message"]
+        assert "Promemoria concimazione" in msg
+        assert "Stallatico" in msg
+
+        # Running the cycle again should NOT re-generate (reminded=True)
+        r = s.post(f"{API}/cycle/run", timeout=30)
+        assert r.status_code == 200
+        assert r.json()["result"]["fertilization_reminders"] == 0
+
+        # DELETE fertilization
+        r = s.delete(f"{API}/fertilization/{fert_id}", timeout=10)
+        assert r.status_code == 200
+        lst = s.get(f"{API}/fertilization", timeout=10).json()
+        assert not any(f["id"] == fert_id for f in lst)
+
+    def test_fertilization_without_plant(self, fresh_user):
+        """Fertilization can be created without a plant_id (whole orchard)."""
+        s, _ = fresh_user
+        r = s.post(f"{API}/fertilization",
+                   json={"ftype": "Letame", "product_name": "Letame maturo",
+                         "dose": "3 kg/mq"}, timeout=10)
+        assert r.status_code == 200, r.text
+        fert = r.json()
+        assert fert["ftype"] == "Letame"
+
+        lst = s.get(f"{API}/fertilization", timeout=10).json()
+        got = [f for f in lst if f["id"] == fert["id"]][0]
+        assert got["plant_name"] == "Tutto il frutteto"
+
+        # cleanup
+        s.delete(f"{API}/fertilization/{fert['id']}", timeout=10)
+
+
+# Helpers used by fertilization test (avoid new top-level imports)
+def datetime_now_utc():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc)
+
+
+def _timedelta_days(d):
+    from datetime import timedelta
+    return timedelta(days=d)
 
 
 if __name__ == "__main__":

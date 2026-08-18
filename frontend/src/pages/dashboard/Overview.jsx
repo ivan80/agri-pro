@@ -73,7 +73,7 @@ export default function Overview() {
         <div className="lg:col-span-2 rounded-xl border border-forest-900/10 bg-white p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-display font-bold text-forest-900">Stazione Ecowitt</h3>
-            <span className={`font-mono-tech text-xs ${w.source === "ecowitt" ? "text-leaf" : "text-citrus"}`}>{w.source === "ecowitt" ? "REALE" : w.source ? "DEMO" : "—"}</span>
+            <span className={`font-mono-tech text-xs ${w.source === "demo" || !w.source ? "text-citrus" : "text-leaf"}`}>{w.source === "ecowitt" ? "ECOWITT" : w.source === "open-meteo" ? "POSIZIONE" : w.source ? "DEMO" : "—"}</span>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[

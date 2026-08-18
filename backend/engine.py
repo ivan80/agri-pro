@@ -206,6 +206,10 @@ async def generate_phase_recommendations(db, user_id, reading, cfg):
                 if prod and prod.get("category") in cats:
                     chosen = prod
                     break
+            # precedenza ai prodotti registrati: auto-match per categoria se nessuna compatibilità
+            if not chosen:
+                chosen = await db.products.find_one({"user_id": user_id, "active": True,
+                                                     "in_stock": True, "category": {"$in": cats}})
             priority = "urgent" if effective >= 3 else "normal"
             if chosen:
                 created = await _add_rec(db, user_id, str(pl["_id"]), str(chosen["_id"]),
@@ -235,9 +239,29 @@ def _oid(v):
         return ObjectId("000000000000000000000000")
 
 
+async def check_fertilization_reminders(db, user_id):
+    now = iso_now()
+    due = await db.fertilizations.find({"user_id": user_id, "reminded": False,
+                                        "next_reminder_date": {"$lte": now, "$ne": None}}).to_list(200)
+    count = 0
+    for f in due:
+        pname = ""
+        if f.get("plant_id"):
+            pl = await db.plants.find_one({"_id": _oid(f["plant_id"])})
+            pname = f" su {pl['name']}" if pl else ""
+        label = f.get("ftype") or "concime"
+        await _add_alert(db, user_id, "fertilization", "info",
+                         f"Promemoria concimazione: {label}{pname}. È il momento di concimare.",
+                         f.get("plant_id"))
+        await db.fertilizations.update_one({"_id": f["_id"]}, {"$set": {"reminded": True}})
+        count += 1
+    return count
+
+
 async def run_cycle(db, user_id, reading, cfg):
     leached = await check_leaching(db, user_id, reading, cfg)
     expired = await check_expiry(db, user_id)
+    fert_reminders = await check_fertilization_reminders(db, user_id)
     raining = is_raining(reading, cfg)
     new_recs = 0
     if raining:
@@ -250,4 +274,5 @@ async def run_cycle(db, user_id, reading, cfg):
         await _add_alert(db, user_id, "fungal", "critical",
                          "Rischio fungino CRITICO: condizioni meteo altamente favorevoli alle infezioni.")
     return {"leached": leached, "expired": expired, "new_recommendations": new_recs,
-            "is_raining": raining, "fungal_risk": fungal, "ran_at": iso_now()}
+            "fertilization_reminders": fert_reminders, "is_raining": raining,
+            "fungal_risk": fungal, "ran_at": iso_now()}

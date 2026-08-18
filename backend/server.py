@@ -98,6 +98,9 @@ DEFAULT_CONFIG = {
     "ecowitt_app_key": "",
     "ecowitt_api_key": "",
     "ecowitt_mac": "",
+    "latitude": "",
+    "longitude": "",
+    "location_name": "",
     "liters_per_plant": "10",
 }
 
@@ -136,7 +139,7 @@ class ProductIn(BaseModel):
     category: str
     persistence_days: float = 7
     carenza_days: int = 0
-    dose_per_hl: Optional[float] = None
+    dose_per_l: Optional[float] = None
     dose_unit: str = "g"
     leaching_threshold_mm: float = 15.0
     max_applications_year: Optional[int] = None
@@ -173,6 +176,16 @@ class ConfigIn(BaseModel):
 class AdvisorIn(BaseModel):
     question: str
     plant_id: Optional[str] = None
+
+
+class FertilizationIn(BaseModel):
+    plant_id: Optional[str] = None
+    ftype: str
+    product_name: Optional[str] = ""
+    dose: Optional[str] = ""
+    applied_at: Optional[str] = None
+    notes: Optional[str] = ""
+    next_reminder_date: Optional[str] = None
 
 
 # ------------------------------------------------ auth routes
@@ -493,6 +506,38 @@ async def ack_all(user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+# ------------------------------------------------ fertilization
+@api.get("/fertilization")
+async def list_fertilization(user: dict = Depends(get_current_user)):
+    docs = await db.fertilizations.find({"user_id": user["id"]}).sort("applied_at", -1).to_list(300)
+    out = []
+    for d in docs:
+        d = clean(d)
+        if d.get("plant_id"):
+            pl = await db.plants.find_one({"_id": oid(d["plant_id"])})
+            d["plant_name"] = pl["name"] if pl else "—"
+        else:
+            d["plant_name"] = "Tutto il frutteto"
+        out.append(d)
+    return out
+
+
+@api.post("/fertilization")
+async def create_fertilization(body: FertilizationIn, user: dict = Depends(get_current_user)):
+    doc = body.model_dump()
+    doc["applied_at"] = doc.get("applied_at") or iso_now()
+    doc.update({"user_id": user["id"], "reminded": False, "created_at": iso_now()})
+    res = await db.fertilizations.insert_one(doc)
+    doc = clean(doc); doc["id"] = str(res.inserted_id)
+    return doc
+
+
+@api.delete("/fertilization/{fert_id}")
+async def delete_fertilization(fert_id: str, user: dict = Depends(get_current_user)):
+    await db.fertilizations.delete_one({"_id": oid(fert_id), "user_id": user["id"]})
+    return {"ok": True}
+
+
 # ------------------------------------------------ weather / ecowitt
 def _demo_weather(cfg):
     now = datetime.now(timezone.utc)
@@ -510,6 +555,24 @@ def _demo_weather(cfg):
         "pressure_hpa": round(1013 + random.uniform(-8, 8), 1),
         "leaf_wetness": None,
     }
+
+
+def _fetch_open_meteo(lat, lon):
+    r = requests.get("https://api.open-meteo.com/v1/forecast", params={
+        "latitude": lat, "longitude": lon,
+        "current": "temperature_2m,relative_humidity_2m,precipitation,rain,wind_speed_10m,surface_pressure,soil_moisture_0_to_1cm",
+        "timezone": "auto"}, timeout=10)
+    c = r.json().get("current", {})
+    if not c or c.get("temperature_2m") is None:
+        raise ValueError("Open-Meteo: dati non disponibili")
+    soil = c.get("soil_moisture_0_to_1cm")
+    return {"source": "open-meteo", "timestamp": iso_now(),
+            "temp_c": c.get("temperature_2m"), "humidity_pct": c.get("relative_humidity_2m"),
+            "soil_moisture_pct": round(soil * 100, 1) if soil is not None else None,
+            "rainfall_rate_mmh": c.get("rain") or 0, "rainfall_event_mm": c.get("precipitation") or 0,
+            "rainfall_daily_mm": c.get("precipitation") or 0,
+            "wind_speed_ms": round((c.get("wind_speed_10m") or 0) / 3.6, 1),
+            "pressure_hpa": c.get("surface_pressure"), "leaf_wetness": None}
 
 
 async def fetch_and_store_weather(user):
@@ -544,6 +607,11 @@ async def fetch_and_store_weather(user):
                            "leaf_wetness": gv("leaf_ch1", "leaf_wetness")}
         except Exception as e:
             logger.warning("Ecowitt fetch failed: %s", e)
+    if reading is None and cfg.get("latitude") and cfg.get("longitude"):
+        try:
+            reading = _fetch_open_meteo(float(cfg["latitude"]), float(cfg["longitude"]))
+        except Exception as e:
+            logger.warning("Open-Meteo fetch failed: %s", e)
     if reading is None:
         reading = _demo_weather(cfg)
     reading["user_id"] = user["id"]
@@ -679,6 +747,7 @@ async def phase_advice(plant_id: str, user: dict = Depends(get_current_user)):
               "pratico e sintetico. Dai consigli di TRATTAMENTO concreti per la fase fenologica indicata: "
               "cosa monitorare, quali principi attivi/categorie usare (rame, zolfo, fungicidi, insetticidi, "
               "Neem, acaricidi), tempistica e precauzioni (es. no trattamenti in fioritura). "
+              "Esprimi SEMPRE le dosi per litro d'acqua (g/L o ml/L), MAI per ettolitro. "
               "Se ci sono prodotti in magazzino, indica quali usare tra quelli. Usa punti elenco brevi. Max 180 parole.")
     prompt = (f"Pianta: {p['name']} ({p['species']} {p.get('variety','')}). "
               f"Fase fenologica attuale: «{ph['phase_name']}» — {ph.get('description','')}. "
@@ -705,7 +774,8 @@ async def advisor(body: AdvisorIn, user: dict = Depends(get_current_user)):
             context = f"\nPianta: {p.get('name')} ({p.get('species')} {p.get('variety','')})."
     system = ("Sei un agronomo esperto in frutticoltura e difesa integrata. Rispondi SEMPRE in italiano, "
               "pratico e accessibile. Consigli su irrigazione, potatura, concimazione, difesa e fasi "
-              "fenologiche. Usa brevi punti elenco. Max 200 parole.")
+              "fenologiche. Esprimi le dosi per litro d'acqua (g/L o ml/L), mai per ettolitro. "
+              "Usa brevi punti elenco. Max 200 parole.")
     chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"advisor-{user['id']}",
                    system_message=system).with_model("anthropic", "claude-sonnet-4-6")
     try:

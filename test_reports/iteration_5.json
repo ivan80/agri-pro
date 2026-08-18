@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 5 covers the 4 new features: (1) product-precedence auto-match, (2) location-based Open-Meteo weather with graceful demo fallback, (3) dose_per_l product model, (4) fertilization CRUD + reminder alerts. Backend: extended pytest suite from 31 to 36 tests, ALL 36 passing (100%). Frontend Playwright verified nav-fertilization -> add-fert-btn -> fert-form (fert-type/fert-plant/fert-date/fert-reminder) -> save-fert -> fert-row appears, Settings location card (cfg-lat/cfg-lon/cfg-locname/detect-location/save-location all visible & functional), Products form now shows 'Dose per litro' placeholder in data-testid product-form. Regression flows still green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Fertilization form + Treatments form", "issues": ["Still uses native <input type='date'> for fert-date and fert-reminder (and applied_at in Treatments modal). Design-consistency LOW — a shadcn Calendar would match the rest of the app. Carried over."]},
+      {"screen": "Auth (post-logout)", "issues": ["Logout still lands on /accedi instead of the landing page /. LOW UX polish. Carried over from iteration_2/3/4."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": ["None blocking. All 4 new features work as specified."],
+  "critical_code_review_comments": [
+    "engine.generate_phase_recommendations: new fallback block correctly implements product precedence — if no compat row is found for the plant+phase, it looks up ANY active+in_stock product whose category matches the risk kind's category list (rame/fungicida/zolfo, insetticida, acaricida). Verified in test_engine_auto_matches_registered_product_by_category. ✔",
+    "server._fetch_open_meteo: uses HTTPS current API with reasonable current-vars set, 10s timeout, raises on missing data so fetch_and_store_weather can gracefully fall back to demo weather. No 500 leaks to client. ✔",
+    "server.fetch_and_store_weather: correct precedence Ecowitt -> Open-Meteo (if lat/lon set) -> demo. On the shared preview IP Open-Meteo may be rate-limited; test accepts either 'open-meteo' or 'demo' source. Verified never 500s.",
+    "ProductIn.dose_per_l: field renamed cleanly to per-liter with Optional[float]=None default. Frontend Products form placeholder is 'Dose per litro'. AI prompts (plant phase-advice + advisor) now explicitly instruct 'dosi per litro d'acqua (g/L o ml/L), MAI per ettolitro'. ✔",
+    "FertilizationIn model + /api/fertilization endpoints (GET/POST/DELETE) are clean; list resolves plant_name (or 'Tutto il frutteto' when null). check_fertilization_reminders in engine.py flags reminded=True after alerting so subsequent /cycle/run runs return fertilization_reminders=0 (verified — no duplicate alerts). ✔",
+    "Minor: /api/fertilization has no PUT (update). Not requested but users may want to edit dose/date without delete+recreate.",
+    "Minor: _fetch_open_meteo does not detect Open-Meteo error response body (e.g. HTTP 429 with error:true JSON); it relies on missing 'current' key. It works for the observed rate-limit shape but a check on r.status_code + j.get('error') would be more explicit."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py — updated existing product test to use dose_per_l (was dose_per_hl); added TestProductDosePerLiter, TestProductPrecedenceAutoMatch, TestLocationWeather, TestFertilization (2 tests). Total 36 pytests, ALL passing."
+  ],
+  "success_rate": {"backend": "100% (36/36 pytests)", "frontend": "100% for the 4 new features + regression (Concimazioni page, Settings location card, Products dose_per_l placeholder, fert create/list flow)"},
+  "test_credentials": "Admin: admin@frutteto.it / Frutteto2026! — verified. Fresh test_* registered users for isolated feature tests.",
+  "seed_data_creation": "None permanent. Test docs prefixed 'TEST_'/'test_*' — user-isolated, no cleanup needed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite now 36 tests (added 5). Key: Open-Meteo may return demo fallback on the preview IP — both are acceptable per PR notes. To test the precedence branch, do NOT add a compatibility row — just register an in-stock product with a category in the risk list (rame/fungicida/zolfo for fungal, insetticida for insect, acaricida for acarid). fresh user's newly-created plant defaults to phase[0] Dormienza (risk 0), so you MUST POST /api/plants/{id}/phase with a risky phase (Melo Fioritura = risk_fungal 3) before running the cycle. Fertilization reminder requires next_reminder_date in the past + reminded=False; after one cycle run it flips to True and won't re-fire.",
+  "rca_of_the_issue": "N/A — feature verification only. All 4 requested changes work as specified."
+}

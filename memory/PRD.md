@@ -38,6 +38,13 @@ Adottata la logica dell'app dell'utente. App ora è un motore agronomico multi-u
 - Frontend nuovo: Dashboard (KPI, Ecowitt, irrigazione, run ciclo), Piante & Fasi (add + dettaglio fasi + set fase + AI), Prodotti, Trattamenti, Raccomandazioni, Alert, Meteo, Assistente AI, Impostazioni. Nav a gruppi.
 - Test: backend 27/27 pytest, tutti i flussi frontend 100%.
 
+## UPDATE (2026-08-18) — 4 richieste utente
+- Precedenza prodotti registrati: il motore auto-abbina i prodotti in magazzino per categoria di rischio (rame/fungicida/zolfo→fungino, insetticida→insetti, acaricida→acari) anche senza compatibilità manuale.
+- Meteo da posizione: se non c'è stazione Ecowitt, scarica il meteo via Open-Meteo (lat/lon in Impostazioni, geolocalizzazione browser). Fallback a demo se irraggiungibile. Sorgenti: ecowitt → open-meteo → demo.
+- Dosi per litro: prodotti usano dose_per_l (g/L); prompt AI aggiornati a dosi per litro.
+- Promemoria concimazione: sezione Concimazioni (stallatico, letame, azotato…) con data promemoria; il ciclo motore genera alert quando scaduto.
+- Test: backend 36/36 pytest, frontend 100%. Logout ora torna alla landing.
+
 ## DEFERRED dai PDF (non ancora implementati)
 - Piano di Lavoro (ottimizzatore miscele/vasca litri), Diagnosi foto AI, pH & irrigazione (tracking pH per pianta + fertilizzazioni), Calendario colturale (matrice specie×mese), Grafici meteo avanzati, Report PDF/HTML, notifiche Telegram (richiede bot token utente), previsioni 7 giorni Open-Meteo, foto/note per pianta, matrice incompatibilità/sinergie prodotti, scheduler cron automatico.
 
