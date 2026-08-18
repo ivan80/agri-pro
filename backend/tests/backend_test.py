@@ -1071,5 +1071,154 @@ class TestFertilizationEdit:
         s.delete(f"{API}/fertilization/{fid}", timeout=10)
 
 
+# --------------------------------------------------------- NEW iter7 features
+class TestCalendar:
+    """(A) Calendario Colturale — GET /api/calendar/groups + /api/calendar/{group}"""
+
+    def test_calendar_groups_returns_7(self, fresh_user):
+        s, _ = fresh_user
+        r = s.get(f"{API}/calendar/groups", timeout=10)
+        assert r.status_code == 200
+        groups = r.json()
+        assert isinstance(groups, list)
+        keys = [g["key"] for g in groups]
+        for k in ("pomacee", "drupacee", "pesco", "vite", "fico", "nocciolo", "avocado"):
+            assert k in keys, f"Missing group {k}"
+        for g in groups:
+            assert "label" in g and "emoji" in g
+
+    def test_calendar_pomacee_returns_12_months(self, fresh_user):
+        s, _ = fresh_user
+        r = s.get(f"{API}/calendar/pomacee", timeout=10)
+        assert r.status_code == 200
+        months = r.json()
+        assert isinstance(months, list) and len(months) == 12
+        for i, m in enumerate(months, start=1):
+            assert m["month"] == i
+            assert "name" in m
+            assert isinstance(m["operations"], list) and len(m["operations"]) >= 1
+        # month 1 = Gennaio, expected op mention "Potatura"
+        assert months[0]["name"] == "Gennaio"
+
+    def test_calendar_unknown_group_falls_back_to_pomacee(self, fresh_user):
+        # unknown group defaults to pomacee per calendar_for()
+        s, _ = fresh_user
+        r = s.get(f"{API}/calendar/does_not_exist", timeout=10)
+        assert r.status_code == 200
+        assert len(r.json()) == 12
+
+    def test_calendar_requires_auth(self):
+        r = requests.get(f"{API}/calendar/groups", timeout=10)
+        assert r.status_code == 401
+
+
+class TestReport:
+    """(B) GET /api/report — orchard report data."""
+
+    def test_report_shape_for_fresh_user(self, fresh_user):
+        s, u = fresh_user
+        r = s.get(f"{API}/report", timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        for k in ("generated_at", "owner", "counts", "plants",
+                  "treatments", "fertilizations", "diagnoses"):
+            assert k in d, f"Missing key {k}"
+        for ck in ("plants", "treatments", "fertilizations", "diagnoses"):
+            assert ck in d["counts"]
+        # fresh user starts empty
+        assert d["counts"]["plants"] == 0
+        assert d["plants"] == []
+        assert d["owner"] == u["name"]
+
+    def test_report_reflects_added_data(self):
+        s = requests.Session()
+        email = f"test_report_{uuid.uuid4().hex[:8]}@frutteto.it"
+        r = s.post(f"{API}/auth/register",
+                   json={"name": "Rep T", "email": email, "password": "Passw0rd!"}, timeout=15)
+        assert r.status_code == 200
+        s.headers.update({"Authorization": f"Bearer {r.json()['token']}"})
+
+        # add a plant + fertilization
+        p = s.post(f"{API}/plants",
+                   json={"name": "TEST Rep Melo", "species": "Melo", "emoji": "🍎"}, timeout=15).json()
+        s.post(f"{API}/fertilization",
+               json={"ftype": "Radicale", "product_name": "TEST NPK",
+                     "dose": "1 kg", "plant_id": p["id"]}, timeout=10)
+
+        r = s.get(f"{API}/report", timeout=15)
+        assert r.status_code == 200
+        d = r.json()
+        assert d["counts"]["plants"] == 1
+        assert d["counts"]["fertilizations"] == 1
+        assert d["plants"][0]["name"] == "TEST Rep Melo"
+        assert d["plants"][0]["phase"]  # phase resolved
+        assert d["fertilizations"][0]["type"] == "Radicale"
+
+
+class TestTelegram:
+    """(C) POST /api/telegram/test — graceful 400 errors, never 500."""
+
+    def test_telegram_test_no_chat_id_returns_400(self, fresh_user):
+        s, _ = fresh_user
+        r = s.post(f"{API}/telegram/test", timeout=10)
+        assert r.status_code == 400
+        detail = r.json().get("detail", "")
+        assert "Chat ID" in detail or "chat" in detail.lower()
+
+    def test_telegram_test_with_chat_id_no_token_returns_400(self):
+        # NOTE: this relies on TELEGRAM_BOT_TOKEN being empty in env (as documented).
+        s = requests.Session()
+        email = f"test_tg_{uuid.uuid4().hex[:8]}@frutteto.it"
+        r = s.post(f"{API}/auth/register",
+                   json={"name": "TG T", "email": email, "password": "Passw0rd!"}, timeout=15)
+        assert r.status_code == 200
+        s.headers.update({"Authorization": f"Bearer {r.json()['token']}"})
+
+        # save chat id
+        r = s.put(f"{API}/config",
+                  json={"values": {"telegram_chat_id": "123456789"}}, timeout=10)
+        assert r.status_code == 200
+        cfg = s.get(f"{API}/config", timeout=10).json()
+        assert cfg["telegram_chat_id"] == "123456789"
+
+        # now telegram/test should 400 (bot token missing) — NOT 500
+        r = s.post(f"{API}/telegram/test", timeout=15)
+        assert r.status_code == 400, \
+            f"Expected 400 for missing bot token, got {r.status_code}: {r.text}"
+        detail = r.json().get("detail", "").lower()
+        # graceful message from _send_telegram
+        assert "bot telegram non configurato" in detail or "invio non riuscito" in detail
+
+
+class TestAutoCycleConfig:
+    """(D) Auto-cycle enable/disable toggle persists via /api/config."""
+
+    def test_auto_cycle_default_false(self, fresh_user):
+        s, _ = fresh_user
+        cfg = s.get(f"{API}/config", timeout=10).json()
+        assert "auto_cycle_enabled" in cfg
+        assert cfg["auto_cycle_enabled"] == "false"
+
+    def test_auto_cycle_toggle_persists(self, fresh_user):
+        s, _ = fresh_user
+        r = s.put(f"{API}/config",
+                  json={"values": {"auto_cycle_enabled": "true"}}, timeout=10)
+        assert r.status_code == 200
+        cfg = s.get(f"{API}/config", timeout=10).json()
+        assert cfg["auto_cycle_enabled"] == "true"
+        # toggle back
+        r = s.put(f"{API}/config",
+                  json={"values": {"auto_cycle_enabled": "false"}}, timeout=10)
+        assert r.status_code == 200
+        cfg = s.get(f"{API}/config", timeout=10).json()
+        assert cfg["auto_cycle_enabled"] == "false"
+
+    def test_backend_alive_after_startup(self):
+        # Simple liveness after startup task registered
+        r = requests.post(f"{API}/auth/login",
+                          json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}, timeout=10)
+        assert r.status_code == 200
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

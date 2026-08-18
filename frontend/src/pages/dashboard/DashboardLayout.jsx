@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Sprout, FlaskConical, Syringe, Star, Bell, CloudSun, Sparkles, Settings2, LogOut, Leaf, Sprout as SproutIcon, ClipboardList, Stethoscope } from "lucide-react";
+import { LayoutDashboard, Sprout, FlaskConical, Syringe, Star, Bell, CloudSun, Sparkles, Settings2, LogOut, Leaf, Sprout as SproutIcon, ClipboardList, Stethoscope, CalendarDays, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
@@ -15,12 +15,14 @@ const groups = [
     { to: "/app/raccomandazioni", icon: Star, label: "Raccomandazioni", id: "recs", badgeKey: "pending_recommendations" },
     { to: "/app/piano-lavoro", icon: ClipboardList, label: "Piano di Lavoro", id: "workplan" },
     { to: "/app/diagnosi", icon: Stethoscope, label: "Diagnosi Foto AI", id: "diagnosis" },
+    { to: "/app/calendario", icon: CalendarDays, label: "Calendario", id: "calendar" },
     { to: "/app/trattamenti", icon: Syringe, label: "Trattamenti", id: "treatments" },
     { to: "/app/concimazioni", icon: SproutIcon, label: "Concimazioni", id: "fertilization" },
     { to: "/app/alert", icon: Bell, label: "Alert", id: "alerts", badgeKey: "unread_alerts" },
   ]},
   { title: "Gestione", items: [
     { to: "/app/prodotti", icon: FlaskConical, label: "Prodotti", id: "products" },
+    { to: "/app/report", icon: FileText, label: "Report", id: "report" },
     { to: "/app/assistente", icon: Sparkles, label: "Assistente AI", id: "advisor" },
     { to: "/app/impostazioni", icon: Settings2, label: "Impostazioni", id: "settings" },
   ]},

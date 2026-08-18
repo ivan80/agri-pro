@@ -16,6 +16,8 @@ import Advisor from "@/pages/dashboard/Advisor";
 import Fertilization from "@/pages/dashboard/Fertilization";
 import Diagnosis from "@/pages/dashboard/Diagnosis";
 import Workplan from "@/pages/dashboard/Workplan";
+import Calendar from "@/pages/dashboard/Calendar";
+import Report from "@/pages/dashboard/Report";
 import Settings from "@/pages/dashboard/Settings";
 
 function Protected({ children }) {
@@ -42,6 +44,8 @@ function App() {
               <Route path="raccomandazioni" element={<Recommendations />} />
               <Route path="piano-lavoro" element={<Workplan />} />
               <Route path="diagnosi" element={<Diagnosis />} />
+              <Route path="calendario" element={<Calendar />} />
+              <Route path="report" element={<Report />} />
               <Route path="alert" element={<Alerts />} />
               <Route path="meteo" element={<Weather />} />
               <Route path="assistente" element={<Advisor />} />

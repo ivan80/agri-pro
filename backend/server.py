@@ -20,6 +20,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr
 
 from phases import PHASE_TEMPLATES, template_for_species, SPECIES_LIST
+from calendar_data import GROUPS as CAL_GROUPS, calendar_for
 from engine import run_cycle, irrigation_status, iso_now
 
 mongo_url = os.environ['MONGO_URL']
@@ -101,6 +102,8 @@ DEFAULT_CONFIG = {
     "latitude": "",
     "longitude": "",
     "location_name": "",
+    "telegram_chat_id": "",
+    "auto_cycle_enabled": "false",
     "liters_per_plant": "10",
 }
 
@@ -716,11 +719,102 @@ async def update_config(body: ConfigIn, user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
-# ------------------------------------------------ engine cycle + status
+# ------------------------------------------------ telegram
+def _send_telegram(chat_id, text):
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not token or not chat_id:
+        return False, "Bot Telegram non configurato o chat id mancante"
+    try:
+        r = requests.post(f"https://api.telegram.org/bot{token}/sendMessage",
+                          json={"chat_id": chat_id, "text": text, "parse_mode": "HTML",
+                                "disable_web_page_preview": True}, timeout=10)
+        j = r.json()
+        if j.get("ok"):
+            return True, "ok"
+        return False, j.get("description", "Errore Telegram")
+    except Exception as e:
+        return False, str(e)
+
+
+async def notify_cycle(user_id, cfg, result):
+    chat_id = (cfg or {}).get("telegram_chat_id")
+    if not chat_id:
+        return
+    if not (result.get("new_recommendations") or result.get("fertilization_reminders")
+            or result.get("leached") or result.get("fungal_risk", 0) >= 3):
+        return
+    lines = ["🌿 <b>Pomario — aggiornamento frutteto</b>"]
+    if result.get("new_recommendations"):
+        lines.append(f"⭐ {result['new_recommendations']} nuove raccomandazioni di trattamento")
+    if result.get("leached"):
+        lines.append(f"💧 {result['leached']} trattamenti dilavati dalla pioggia")
+    if result.get("fertilization_reminders"):
+        lines.append(f"🌱 {result['fertilization_reminders']} promemoria concimazione")
+    if result.get("fungal_risk", 0) >= 3:
+        lines.append("🔴 Rischio fungino CRITICO")
+    if result.get("is_raining"):
+        lines.append("🌧️ Pioggia in corso: trattamenti sospesi")
+    _send_telegram(chat_id, "\n".join(lines))
+
+
+@api.post("/telegram/test")
+async def telegram_test(user: dict = Depends(get_current_user)):
+    cfg = await get_user_config(user["id"])
+    chat_id = cfg.get("telegram_chat_id")
+    if not chat_id:
+        raise HTTPException(400, "Inserisci prima la tua Chat ID nelle Impostazioni")
+    ok, msg = _send_telegram(chat_id, "✅ <b>Pomario</b> collegato! Riceverai qui gli avvisi del tuo frutteto.")
+    if not ok:
+        raise HTTPException(400, f"Invio non riuscito: {msg}")
+    return {"ok": True}
+
+
+# ------------------------------------------------ calendar
+@api.get("/calendar/groups")
+async def calendar_groups(user: dict = Depends(get_current_user)):
+    return CAL_GROUPS
+
+
+@api.get("/calendar/{group}")
+async def calendar(group: str, user: dict = Depends(get_current_user)):
+    return calendar_for(group)
+
+
+# ------------------------------------------------ report
+@api.get("/report")
+async def report(user: dict = Depends(get_current_user)):
+    plants = await db.plants.find({"user_id": user["id"], "active": True}).to_list(500)
+    plant_out = []
+    for p in plants:
+        ph = await db.phases.find_one({"_id": oid(p["current_phase_id"])}) if p.get("current_phase_id") else None
+        plant_out.append({"name": p["name"], "species": p["species"], "variety": p.get("variety", ""),
+                          "emoji": p.get("emoji", "🌳"), "phase": ph["phase_name"] if ph else "—"})
+    treatments = await db.treatments.find({"user_id": user["id"]}).sort("applied_at", -1).to_list(100)
+    tr_out = []
+    for t in treatments:
+        pl = await db.plants.find_one({"_id": oid(t["plant_id"])}) if t.get("plant_id") else None
+        pr = await db.products.find_one({"_id": oid(t["product_id"])}) if t.get("product_id") else None
+        tr_out.append({"date": t.get("applied_at", "")[:10], "plant": pl["name"] if pl else "—",
+                       "product": pr["name"] if pr else "—", "status": t.get("status")})
+    ferts = await db.fertilizations.find({"user_id": user["id"]}).sort("applied_at", -1).to_list(100)
+    fert_out = [{"date": (f.get("applied_at") or "")[:10], "type": f.get("ftype"),
+                 "product": f.get("product_name", ""), "dose": f.get("dose", "")} for f in ferts]
+    diags = await db.diagnoses.find({"user_id": user["id"]}).sort("created_at", -1).to_list(30)
+    diag_out = [{"date": (d.get("created_at") or "")[:10],
+                 "summary": (d.get("diagnosis", "")[:160] + "…")} for d in diags]
+    return {"generated_at": iso_now(), "owner": user.get("name"),
+            "counts": {"plants": len(plant_out), "treatments": len(tr_out),
+                       "fertilizations": len(fert_out), "diagnoses": len(diag_out)},
+            "plants": plant_out, "treatments": tr_out[:50],
+            "fertilizations": fert_out[:50], "diagnoses": diag_out}
+
+
+
 @api.post("/cycle/run")
 async def cycle_run(user: dict = Depends(get_current_user)):
     reading, cfg = await fetch_and_store_weather(user)
     result = await run_cycle(db, user["id"], reading, cfg)
+    await notify_cycle(user["id"], cfg, result)
     return {"ok": True, "result": result, "weather": {k: reading[k] for k in
             ("temp_c", "humidity_pct", "soil_moisture_pct", "rainfall_rate_mmh") if k in reading}}
 
@@ -889,6 +983,28 @@ async def advisor(body: AdvisorIn, user: dict = Depends(get_current_user)):
 
 
 # ------------------------------------------------ startup
+import asyncio
+
+
+async def _auto_cycle_loop():
+    await asyncio.sleep(30)
+    while True:
+        try:
+            configs = await db.configs.find({"values.auto_cycle_enabled": "true"}).to_list(1000)
+            for c in configs:
+                user = await db.users.find_one({"_id": ObjectId(c["user_id"])})
+                if not user:
+                    continue
+                user["id"] = str(user["_id"])
+                reading, cfg = await fetch_and_store_weather(user)
+                result = await run_cycle(db, user["id"], reading, cfg)
+                await notify_cycle(user["id"], cfg, result)
+                logger.info("Auto-cycle for %s: %s", user["id"], result)
+        except Exception as e:
+            logger.warning("Auto-cycle loop error: %s", e)
+        await asyncio.sleep(3600)
+
+
 @app.on_event("startup")
 async def startup():
     await db.users.create_index("email", unique=True)
@@ -901,6 +1017,7 @@ async def startup():
                                    "plan": "lifetime", "created_at": iso_now()})
     elif not verify_password(admin_pw, existing["password_hash"]):
         await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_pw)}})
+    asyncio.create_task(_auto_cycle_loop())
     logger.info("Frutteto Agro API ready.")
 
 

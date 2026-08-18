@@ -51,6 +51,13 @@ Adottata la logica dell'app dell'utente. App ora è un motore agronomico multi-u
 - Modifica Concimazioni: PUT /api/fertilization/{id} + UI edit.
 - Test: backend 42/42 pytest, frontend 100%. Vision AI verificata.
 
+## UPDATE (2026-08-18c) — Telegram + Calendario + Report + Ciclo automatico
+- Telegram: bot a livello app (TELEGRAM_BOT_TOKEN in .env, ancora VUOTO su richiesta utente → invio disattivo finché non lo aggiunge). Ogni utente inserisce la propria telegram_chat_id in Impostazioni (box istruzioni 3 passi). POST /api/telegram/test, notify_cycle invia riepilogo dopo il ciclo. Gestione errori pulita (400, mai 500) senza token.
+- Calendario Colturale: calendar_data.py (7 gruppi specie × 12 mesi di operazioni), GET /api/calendar/groups e /api/calendar/{group}. UI con tab specie e mese corrente evidenziato.
+- Report: GET /api/report (aggregati piante/trattamenti/concimazioni/diagnosi), pagina stampabile (window.print → PDF) con CSS @media print.
+- Ciclo automatico: config auto_cycle_enabled + loop asyncio orario in startup (_auto_cycle_loop) che esegue il motore e invia notifiche Telegram per gli utenti con auto attivo. Toggle in Impostazioni.
+- Test: backend 53/53 pytest, frontend 100%.
+
 ## DEFERRED dai PDF (non ancora implementati)
 - Piano di Lavoro (ottimizzatore miscele/vasca litri), Diagnosi foto AI, pH & irrigazione (tracking pH per pianta + fertilizzazioni), Calendario colturale (matrice specie×mese), Grafici meteo avanzati, Report PDF/HTML, notifiche Telegram (richiede bot token utente), previsioni 7 giorni Open-Meteo, foto/note per pianta, matrice incompatibilità/sinergie prodotti, scheduler cron automatico.
 

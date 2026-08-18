@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 7 verified the 4 new features requested: (A) Calendario Colturale, (B) Report PDF, (C) Telegram notifications (chat_id-only config path + graceful 400 error handling with no bot token), (D) Ciclo Automatico toggle. Backend suite extended from 42 -> 53 pytests, ALL 53 PASSING (100%) in ~70s. New tests: TestCalendar (4), TestReport (2), TestTelegram (2), TestAutoCycleConfig (3). Frontend Playwright: admin login OK; /calendario shows all 7 group buttons (cal-group-pomacee..avocado) and 12 cal-month cards, switching group re-renders 12; /report renders report-content with counts + Piante/Trattamenti/Concimazioni sections + print-report-btn; /impostazioni Telegram card (cfg-telegram + test-telegram) correctly triggers backend 400 (never 500) both when chat_id empty and when chat_id set but bot token empty — 'Bot Telegram non configurato' toast displayed. toggle-auto flips visually and PERSISTS across full page reload. Regression: full 53-test suite still 100% green (login, plants+auto-BBCH, treatments, cycle engine, recommendations, alerts, weather, irrigation, fertilization CRUD/edit, diagnosis, workplan, phase-advice, config).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Settings / Concimazioni", "issues": ["Date pickers still native <input type='date'> (carried over from iter5/6)"]},
+      {"screen": "Auth post-logout", "issues": ["Logout still lands on /accedi rather than / (carried over)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": ["None blocking. All 4 requested features (Calendar / Report / Telegram / Auto-cycle) work end-to-end. TELEGRAM_BOT_TOKEN still empty as expected — real message sending cannot be tested until user provides a token; the error path is verified to return clean 400 (never 500)."],
+  "critical_code_review_comments": [
+    "GET /api/calendar/groups returns 7 groups with key/label/emoji. GET /api/calendar/{group} returns 12 months with month/name/operations, and unknown group falls back to pomacee (calendar_data.calendar_for). Cleanly auth-guarded.",
+    "GET /api/report: correctly aggregates plants (with phase name resolution), treatments (top 50), fertilizations (top 50), diagnoses (top 30). counts dict is present. owner uses user.name. generated_at is iso. Frontend Report.jsx handles empty arrays gracefully.",
+    "POST /api/telegram/test: verifies chat_id first -> HTTPException(400) with 'Inserisci prima la tua Chat ID'; then _send_telegram returns (False, 'Bot Telegram non configurato...') when TELEGRAM_BOT_TOKEN is empty, endpoint raises HTTPException(400, f'Invio non riuscito: {msg}'). Correctly returns 400 for both cases — no 500.",
+    "PUT /api/config: merge semantics preserve other keys when partial values are sent (verified by test that toggles auto_cycle_enabled without touching other keys and confirms via GET).",
+    "Background auto_cycle loop: _auto_cycle_loop registered as asyncio.create_task in startup, sleeps 30s then queries configs where values.auto_cycle_enabled='true' every hour. Backend startup is clean (login endpoint responsive after startup). Not blocking, no crash.",
+    "notify_cycle only fires when result contains new_recommendations/leached/fertilization_reminders or fungal_risk>=3 — good filter.",
+    "MINOR: _send_telegram uses parse_mode='HTML' — if user's chat_id turns out invalid the description string is passed straight through to toast; consider a friendlier error for common 'chat not found' cases.",
+    "MINOR: Calendar frontend swallows API errors via .catch(() => {}), which hides 401s; not critical since ProtectedRoute already guards navigation.",
+    "MINOR: Report is loaded once on mount; consider adding a Refresh button (window.print re-fetches nothing, but users adding data mid-session need to reload)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py — added TestCalendar (4), TestReport (2), TestTelegram (2), TestAutoCycleConfig (3). Total 53 pytests all passing."
+  ],
+  "success_rate": {"backend": "100% (53/53 pytests)", "frontend": "100% for all 4 new features (Calendar navigation + all 7 groups + 12 months; Report content + print button; Telegram graceful 400 handling; Auto-cycle toggle + persistence)"},
+  "test_credentials": "Admin: admin@frutteto.it / Frutteto2026! — verified.",
+  "seed_data_creation": "None permanent. Test docs prefixed 'TEST_' / test users 'test_*'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend suite is 53 pytests. TELEGRAM_BOT_TOKEN is empty by design in this iteration — test_telegram_test_with_chat_id_no_token_returns_400 EXPECTS a 400 with 'Bot Telegram non configurato' or 'Invio non riuscito' in the detail. If a real bot token is later provided, this test will start receiving 200 or a different Telegram API error and should be updated. The _auto_cycle_loop runs in background: don't rely on it firing in tests (it sleeps 30s then 3600s); we only verify config toggle persistence + backend liveness.",
+  "rca_of_the_issue": "N/A — feature verification only. All 4 requested features work end-to-end and gracefully handle the 'no bot token' path."
+}
