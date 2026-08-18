@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Trash2, Leaf, BellRing } from "lucide-react";
+import { Plus, Trash2, Leaf, BellRing, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { api, formatApiErrorDetail } from "@/lib/api";
 import { Empty } from "@/components/AgroUI";
@@ -15,6 +15,7 @@ export default function Fertilization() {
   const [items, setItems] = useState([]);
   const [plants, setPlants] = useState([]);
   const [open, setOpen] = useState(false);
+  const [editId, setEditId] = useState(null);
   const [form, setForm] = useState(empty);
   const [saving, setSaving] = useState(false);
 
@@ -26,6 +27,15 @@ export default function Fertilization() {
 
   const set = (k) => (e) => setForm({ ...form, [k]: e.target.value });
 
+  const openNew = () => { setEditId(null); setForm(empty); setOpen(true); };
+  const openEdit = (f) => {
+    setEditId(f.id);
+    setForm({ plant_id: f.plant_id || "", ftype: f.ftype, product_name: f.product_name || "",
+      dose: f.dose || "", applied_at: f.applied_at ? f.applied_at.slice(0, 10) : "",
+      notes: f.notes || "", next_reminder_date: f.next_reminder_date ? f.next_reminder_date.slice(0, 10) : "" });
+    setOpen(true);
+  };
+
   const save = async (e) => {
     e.preventDefault();
     setSaving(true);
@@ -33,9 +43,9 @@ export default function Fertilization() {
       const payload = { ...form, plant_id: form.plant_id || null,
         applied_at: form.applied_at ? new Date(form.applied_at).toISOString() : null,
         next_reminder_date: form.next_reminder_date ? new Date(form.next_reminder_date).toISOString() : null };
-      await api.post("/fertilization", payload);
-      toast.success("Concimazione registrata");
-      setForm(empty); setOpen(false); load();
+      if (editId) { await api.put(`/fertilization/${editId}`, payload); toast.success("Concimazione aggiornata"); }
+      else { await api.post("/fertilization", payload); toast.success("Concimazione registrata"); }
+      setForm(empty); setEditId(null); setOpen(false); load();
     } catch (err) { toast.error(formatApiErrorDetail(err.response?.data?.detail)); }
     finally { setSaving(false); }
   };
@@ -53,7 +63,7 @@ export default function Fertilization() {
           <h1 className="font-display font-black tracking-tighter text-4xl text-forest-900">Concimazioni</h1>
           <p className="text-forest-700/70 mt-2">Registra concimazioni (stallatico, letame, azotato…) e imposta promemoria. Il motore ti avvisa quando è il momento.</p>
         </div>
-        <button data-testid="add-fert-btn" onClick={() => setOpen(true)} className="rounded-full bg-forest-900 text-white font-semibold px-5 py-3 flex items-center gap-2 hover:-translate-y-0.5 transition-transform">
+        <button data-testid="add-fert-btn" onClick={openNew} className="rounded-full bg-forest-900 text-white font-semibold px-5 py-3 flex items-center gap-2 hover:-translate-y-0.5 transition-transform">
           <Plus className="w-4 h-4" /> Registra concimazione
         </button>
       </div>
@@ -81,6 +91,7 @@ export default function Fertilization() {
                   </div>
                 )}
               </div>
+              <button data-testid="edit-fert" onClick={() => openEdit(f)} className="text-forest-700/30 hover:text-sky transition-colors"><Pencil className="w-4 h-4" /></button>
               <button data-testid="delete-fert" onClick={() => del(f.id)} className="text-forest-700/30 hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
             </motion.div>
           ))}
@@ -91,7 +102,7 @@ export default function Fertilization() {
         {open && (
           <Modal onClose={() => setOpen(false)}>
             <form onSubmit={save} data-testid="fert-form">
-              <ModalHead title="Registra concimazione" onClose={() => setOpen(false)} />
+              <ModalHead title={editId ? "Modifica concimazione" : "Registra concimazione"} onClose={() => setOpen(false)} />
               <div className="space-y-3">
                 <select data-testid="fert-type" value={form.ftype} onChange={set("ftype")} className="inp bg-white">
                   {TYPES.map((t) => <option key={t}>{t}</option>)}

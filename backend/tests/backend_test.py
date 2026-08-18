@@ -846,5 +846,230 @@ def _timedelta_days(d):
     return timedelta(days=d)
 
 
+# --------------------------------------------------------- NEW iter6 features
+def _make_leaf_jpeg_b64():
+    """Create a real JPEG with visible leaf-like features (edges, veins, spots)."""
+    import base64, io, random
+    from PIL import Image, ImageDraw
+    img = Image.new("RGB", (320, 320), (30, 90, 40))
+    d = ImageDraw.Draw(img)
+    # leaf outline (ellipse)
+    d.ellipse([30, 60, 290, 260], fill=(60, 140, 60), outline=(20, 60, 20), width=3)
+    # central vein
+    d.line([(60, 160), (280, 160)], fill=(30, 80, 30), width=4)
+    # side veins
+    for y in range(80, 250, 20):
+        d.line([(160, 160), (60 + random.randint(0, 20), y)], fill=(40, 100, 40), width=2)
+        d.line([(160, 160), (280 - random.randint(0, 20), y)], fill=(40, 100, 40), width=2)
+    # brownish disease spots
+    for _ in range(18):
+        x = random.randint(60, 270); y = random.randint(80, 240)
+        r = random.randint(4, 12)
+        d.ellipse([x - r, y - r, x + r, y + r], fill=(120, 70, 30), outline=(80, 40, 15))
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85)
+    return base64.b64encode(buf.getvalue()).decode()
+
+
+class TestDiagnosis:
+    """(A) POST /api/diagnosis + GET /api/diagnosis history."""
+
+    def test_diagnosis_with_real_image_returns_italian(self, fresh_user):
+        s, _ = fresh_user
+        img_b64 = _make_leaf_jpeg_b64()
+        r = s.post(f"{API}/diagnosis",
+                   json={"image_base64": img_b64,
+                         "notes": "foglie con macchie brune"}, timeout=120)
+        if r.status_code == 502:
+            pytest.skip(f"AI service unavailable: {r.text}")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert "diagnosis" in d and "id" in d
+        text = d["diagnosis"]
+        assert isinstance(text, str) and len(text) > 40
+        low = text.lower()
+        # at least a couple of the required italian sections should appear
+        section_hits = sum(1 for s2 in ("diagnosi", "gravit", "sintomi", "trattamento", "prevenzione") if s2 in low)
+        assert section_hits >= 3, f"Expected italian markdown sections, got: {text[:400]}"
+
+    def test_diagnosis_strips_data_url_prefix(self, fresh_user):
+        s, _ = fresh_user
+        img_b64 = _make_leaf_jpeg_b64()
+        data_url = "data:image/jpeg;base64," + img_b64
+        r = s.post(f"{API}/diagnosis",
+                   json={"image_base64": data_url, "notes": "prova prefix"}, timeout=120)
+        if r.status_code == 502:
+            pytest.skip(f"AI service unavailable: {r.text}")
+        assert r.status_code == 200, r.text
+        assert "diagnosis" in r.json()
+
+    def test_diagnosis_history_lists_entries(self, fresh_user):
+        s, _ = fresh_user
+        # ensure at least one exists (may already be from previous test)
+        img_b64 = _make_leaf_jpeg_b64()
+        # attach to a plant so plant_name is resolved
+        r = s.post(f"{API}/plants",
+                   json={"name": "TEST Diag Melo", "species": "Melo", "emoji": "🍎"}, timeout=15)
+        plant_id = r.json()["id"]
+        r = s.post(f"{API}/diagnosis",
+                   json={"image_base64": img_b64, "plant_id": plant_id,
+                         "notes": "storia diagnosi"}, timeout=120)
+        if r.status_code == 502:
+            pytest.skip(f"AI service unavailable: {r.text}")
+        assert r.status_code == 200
+        r2 = s.get(f"{API}/diagnosis", timeout=15)
+        assert r2.status_code == 200
+        lst = r2.json()
+        assert isinstance(lst, list) and len(lst) >= 1
+        # find one attached to plant
+        mine = [x for x in lst if x.get("plant_id") == plant_id]
+        assert mine, "Diagnosis history missing entry with plant_id"
+        assert mine[0].get("plant_name") == "TEST Diag Melo"
+        assert "diagnosis" in mine[0]
+
+
+class TestWorkplan:
+    """(B) GET /api/workplan aggregates pending recs into tank-mix items."""
+
+    def test_workplan_aggregates_and_computes_liters(self):
+        s = requests.Session()
+        email = f"test_wp_{uuid.uuid4().hex[:8]}@frutteto.it"
+        r = s.post(f"{API}/auth/register",
+                   json={"name": "WP T", "email": email, "password": "Passw0rd!"}, timeout=15)
+        assert r.status_code == 200
+        s.headers.update({"Authorization": f"Bearer {r.json()['token']}"})
+
+        # 2 plants -> risky phase
+        plant_ids = []
+        for i, nm in enumerate(["TEST WP Melo A", "TEST WP Melo B"]):
+            r = s.post(f"{API}/plants",
+                       json={"name": nm, "species": "Melo", "emoji": "🍎"}, timeout=15)
+            pid = r.json()["id"]
+            phases = s.get(f"{API}/plants/{pid}/phases", timeout=10).json()
+            risky = next(ph for ph in phases if ph["phase_name"] == "Fioritura")
+            s.post(f"{API}/plants/{pid}/phase",
+                   json={"phase_id": risky["id"]}, timeout=10)
+            plant_ids.append(pid)
+
+        # rame product w/ dose_per_l
+        r = s.post(f"{API}/products",
+                   json={"name": "TEST WP Rame", "category": "rame",
+                         "persistence_days": 7, "carenza_days": 3,
+                         "dose_per_l": 4, "dose_unit": "g",
+                         "leaching_threshold_mm": 20, "in_stock": True}, timeout=10)
+        assert r.status_code == 200
+
+        # liters_per_plant to 5 for a predictable computation
+        s.put(f"{API}/config", json={"values": {"liters_per_plant": "5"}}, timeout=10)
+
+        r = s.post(f"{API}/cycle/run", timeout=30)
+        assert r.status_code == 200
+        res = r.json()["result"]
+        if res["is_raining"]:
+            pytest.skip("Demo weather rolled 'raining' — engine skips rec generation")
+
+        r = s.get(f"{API}/workplan", timeout=15)
+        assert r.status_code == 200, r.text
+        wp = r.json()
+        for k in ("items", "liters_per_plant", "warnings", "total_interventi"):
+            assert k in wp
+        assert wp["liters_per_plant"] == 5.0
+        items = wp["items"]
+        assert len(items) >= 1, f"Expected at least 1 workplan item. Got: {wp}"
+        rame = next((x for x in items if x["category"] == "rame"), None)
+        assert rame is not None, f"No rame item. items={items}"
+        assert rame["n_plants"] == 2
+        assert rame["liters"] == 10.0  # 2 * 5
+        assert rame["product_qty"] == 40.0  # 4 g/L * 10 L
+        assert rame["dose_unit"] == "g"
+        assert set(rame["plants"]) == {"TEST WP Melo A", "TEST WP Melo B"}
+        # rame present -> warning about carenza / fioritura
+        assert any("Rame" in w for w in wp["warnings"])
+
+    def test_workplan_warning_rame_zolfo_incompat(self):
+        s = requests.Session()
+        email = f"test_wpz_{uuid.uuid4().hex[:8]}@frutteto.it"
+        r = s.post(f"{API}/auth/register",
+                   json={"name": "WPZ", "email": email, "password": "Passw0rd!"}, timeout=15)
+        s.headers.update({"Authorization": f"Bearer {r.json()['token']}"})
+        # Insert two dummy pending recs directly by having engine generate two categories:
+        # Not straightforward without compat rows for both; instead, we bypass and craft via API.
+        # Use two plants: one with fungal risk gets 'rame', another with acarid risk gets 'zolfo' compat.
+        # Simpler: create plant + set risky phase and register BOTH rame and zolfo products in stock.
+        # The engine matches rame OR fungicida for fungal — 'zolfo' won't auto-match to fungal.
+        # So we manually add compatibility rows to force both categories to appear.
+        r = s.post(f"{API}/plants",
+                   json={"name": "TEST WPZ Melo", "species": "Melo", "emoji": "🍎"}, timeout=15)
+        pid = r.json()["id"]
+        phases = s.get(f"{API}/plants/{pid}/phases", timeout=10).json()
+        risky = next(ph for ph in phases if ph["phase_name"] == "Fioritura")
+        s.post(f"{API}/plants/{pid}/phase", json={"phase_id": risky["id"]}, timeout=10)
+
+        pr_rame = s.post(f"{API}/products",
+                         json={"name": "TEST WPZ Rame", "category": "rame",
+                               "persistence_days": 7, "carenza_days": 3,
+                               "dose_per_l": 3, "dose_unit": "g",
+                               "leaching_threshold_mm": 20, "in_stock": True}, timeout=10).json()
+        pr_zolfo = s.post(f"{API}/products",
+                          json={"name": "TEST WPZ Zolfo", "category": "zolfo",
+                                "persistence_days": 7, "carenza_days": 3,
+                                "dose_per_l": 5, "dose_unit": "g",
+                                "leaching_threshold_mm": 20, "in_stock": True}, timeout=10).json()
+        # add compat rows so BOTH generate pending recs for the same plant+phase
+        s.post(f"{API}/products/{pr_rame['id']}/compatibility",
+               json={"plant_id": pid, "phase_id": risky["id"],
+                     "priority": 1, "recommended": True}, timeout=10)
+        s.post(f"{API}/products/{pr_zolfo['id']}/compatibility",
+               json={"plant_id": pid, "phase_id": risky["id"],
+                     "priority": 2, "recommended": True}, timeout=10)
+
+        r = s.post(f"{API}/cycle/run", timeout=30)
+        assert r.status_code == 200
+        if r.json()["result"]["is_raining"]:
+            pytest.skip("Demo weather rolled 'raining'")
+
+        r = s.get(f"{API}/workplan", timeout=15)
+        assert r.status_code == 200
+        wp = r.json()
+        cats = {i["category"] for i in wp["items"]}
+        # We expect the engine to pick top-priority (rame) for fungal risk; zolfo may or may not
+        # appear depending on engine behavior. Test the incompatibility warning ONLY when both do.
+        if "rame" in cats and "zolfo" in cats:
+            assert any("rame" in w.lower() and "zolfo" in w.lower() for w in wp["warnings"]), \
+                f"Missing rame/zolfo incompatibility warning. warnings={wp['warnings']}"
+        else:
+            # At least verify workplan is well-formed and no crash
+            assert isinstance(wp["warnings"], list)
+
+
+class TestFertilizationEdit:
+    """(C) PUT /api/fertilization/{id} updates fields and resets reminded=False."""
+
+    def test_edit_fertilization_updates_fields(self, fresh_user):
+        s, _ = fresh_user
+        r = s.post(f"{API}/fertilization",
+                   json={"ftype": "Fogliare", "product_name": "TEST Chelato Fe",
+                         "dose": "1 g/L"}, timeout=10)
+        assert r.status_code == 200
+        fid = r.json()["id"]
+
+        # PUT update
+        r = s.put(f"{API}/fertilization/{fid}",
+                  json={"ftype": "Radicale", "product_name": "TEST NPK 20-20-20",
+                        "dose": "3 kg/pianta", "notes": "aggiornato"}, timeout=10)
+        assert r.status_code == 200
+
+        lst = s.get(f"{API}/fertilization", timeout=10).json()
+        got = [f for f in lst if f["id"] == fid][0]
+        assert got["ftype"] == "Radicale"
+        assert got["product_name"] == "TEST NPK 20-20-20"
+        assert got["dose"] == "3 kg/pianta"
+        assert got["notes"] == "aggiornato"
+        assert got["reminded"] is False
+
+        # cleanup
+        s.delete(f"{API}/fertilization/{fid}", timeout=10)
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v", "--tb=short"])

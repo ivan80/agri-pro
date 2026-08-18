@@ -45,6 +45,12 @@ Adottata la logica dell'app dell'utente. App ora è un motore agronomico multi-u
 - Promemoria concimazione: sezione Concimazioni (stallatico, letame, azotato…) con data promemoria; il ciclo motore genera alert quando scaduto.
 - Test: backend 36/36 pytest, frontend 100%. Logout ora torna alla landing.
 
+## UPDATE (2026-08-18b) — Miglioramenti approvati dall'utente
+- Diagnosi Foto AI: POST /api/diagnosis (Claude vision via emergentintegrations ImageContent), upload foto con resize client-side, referto in italiano (diagnosi, gravità, sintomi, trattamento con dosi/L, prevenzione) + storico.
+- Piano di Lavoro: GET /api/workplan raggruppa le raccomandazioni attive per prodotto in interventi con litri acqua (n_piante × L/pianta) e quantità prodotto (dose/L × litri) + avvisi incompatibilità (rame+zolfo).
+- Modifica Concimazioni: PUT /api/fertilization/{id} + UI edit.
+- Test: backend 42/42 pytest, frontend 100%. Vision AI verificata.
+
 ## DEFERRED dai PDF (non ancora implementati)
 - Piano di Lavoro (ottimizzatore miscele/vasca litri), Diagnosi foto AI, pH & irrigazione (tracking pH per pianta + fertilizzazioni), Calendario colturale (matrice specie×mese), Grafici meteo avanzati, Report PDF/HTML, notifiche Telegram (richiede bot token utente), previsioni 7 giorni Open-Meteo, foto/note per pianta, matrice incompatibilità/sinergie prodotti, scheduler cron automatico.
 

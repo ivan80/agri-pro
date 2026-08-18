@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, Link } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { LayoutDashboard, Sprout, FlaskConical, Syringe, Star, Bell, CloudSun, Sparkles, Settings2, LogOut, Leaf, Sprout as SproutIcon } from "lucide-react";
+import { LayoutDashboard, Sprout, FlaskConical, Syringe, Star, Bell, CloudSun, Sparkles, Settings2, LogOut, Leaf, Sprout as SproutIcon, ClipboardList, Stethoscope } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 import { api } from "@/lib/api";
@@ -13,6 +13,8 @@ const groups = [
   { title: "Agronomia", items: [
     { to: "/app/piante", icon: Sprout, label: "Piante & Fasi", id: "plants" },
     { to: "/app/raccomandazioni", icon: Star, label: "Raccomandazioni", id: "recs", badgeKey: "pending_recommendations" },
+    { to: "/app/piano-lavoro", icon: ClipboardList, label: "Piano di Lavoro", id: "workplan" },
+    { to: "/app/diagnosi", icon: Stethoscope, label: "Diagnosi Foto AI", id: "diagnosis" },
     { to: "/app/trattamenti", icon: Syringe, label: "Trattamenti", id: "treatments" },
     { to: "/app/concimazioni", icon: SproutIcon, label: "Concimazioni", id: "fertilization" },
     { to: "/app/alert", icon: Bell, label: "Alert", id: "alerts", badgeKey: "unread_alerts" },

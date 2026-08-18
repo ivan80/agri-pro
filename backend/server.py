@@ -188,6 +188,12 @@ class FertilizationIn(BaseModel):
     next_reminder_date: Optional[str] = None
 
 
+class DiagnosisIn(BaseModel):
+    image_base64: str
+    plant_id: Optional[str] = None
+    notes: Optional[str] = ""
+
+
 # ------------------------------------------------ auth routes
 @api.post("/auth/register")
 async def register(body: RegisterIn, response: Response):
@@ -538,6 +544,52 @@ async def delete_fertilization(fert_id: str, user: dict = Depends(get_current_us
     return {"ok": True}
 
 
+@api.put("/fertilization/{fert_id}")
+async def update_fertilization(fert_id: str, body: FertilizationIn, user: dict = Depends(get_current_user)):
+    upd = body.model_dump()
+    upd["plant_id"] = upd.get("plant_id") or None
+    upd["reminded"] = False
+    await db.fertilizations.update_one({"_id": oid(fert_id), "user_id": user["id"]}, {"$set": upd})
+    return {"ok": True}
+
+
+# ------------------------------------------------ work plan (tank mix)
+@api.get("/workplan")
+async def workplan(user: dict = Depends(get_current_user)):
+    cfg = await get_user_config(user["id"])
+    lpp = float(cfg.get("liters_per_plant") or 10)
+    recs = await db.recommendations.find({"user_id": user["id"], "status": "pending",
+                                          "product_id": {"$ne": None}}).to_list(300)
+    groups = {}
+    for r in recs:
+        prod = await db.products.find_one({"_id": oid(r["product_id"])})
+        if not prod:
+            continue
+        pid = str(prod["_id"])
+        g = groups.setdefault(pid, {"product": prod["name"], "category": prod["category"],
+                                    "dose_per_l": prod.get("dose_per_l"),
+                                    "dose_unit": prod.get("dose_unit", "g"), "plants": []})
+        pl = await db.plants.find_one({"_id": oid(r["plant_id"])}) if r.get("plant_id") else None
+        g["plants"].append(pl["name"] if pl else "—")
+    items = []
+    cats = set()
+    for pid, g in groups.items():
+        n = len(g["plants"])
+        liters = round(n * lpp, 1)
+        qty = round((g["dose_per_l"] or 0) * liters, 1) if g["dose_per_l"] else None
+        cats.add(g["category"])
+        items.append({"product": g["product"], "category": g["category"], "plants": g["plants"],
+                      "n_plants": n, "liters": liters, "product_qty": qty, "dose_unit": g["dose_unit"],
+                      "dose_per_l": g["dose_per_l"]})
+    warnings = []
+    if "rame" in cats and "zolfo" in cats:
+        warnings.append("Non miscelare rame e zolfo nella stessa vasca: eseguire due interventi distinti.")
+    if "rame" in cats:
+        warnings.append("Rame: evitare in fioritura e con temperature elevate. Rispettare i tempi di carenza.")
+    return {"items": items, "liters_per_plant": lpp, "warnings": warnings,
+            "total_interventi": len(items)}
+
+
 # ------------------------------------------------ weather / ecowitt
 def _demo_weather(cfg):
     now = datetime.now(timezone.utc)
@@ -762,6 +814,56 @@ async def phase_advice(plant_id: str, user: dict = Depends(get_current_user)):
         logger.error("phase advice error: %s", e)
         raise HTTPException(502, "Consiglio AI non disponibile")
     return {"advice": reply, "phase": clean(ph)}
+
+
+@api.post("/diagnosis")
+async def diagnosis(body: DiagnosisIn, user: dict = Depends(get_current_user)):
+    from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+    img_b64 = body.image_base64
+    if "," in img_b64 and img_b64.strip().startswith("data:"):
+        img_b64 = img_b64.split(",", 1)[1]
+    context = ""
+    if body.plant_id:
+        p = await db.plants.find_one({"_id": oid(body.plant_id), "user_id": user["id"]})
+        if p:
+            ph = await db.phases.find_one({"_id": oid(p["current_phase_id"])}) if p.get("current_phase_id") else None
+            context = (f"\nPianta: {p['name']} ({p['species']} {p.get('variety','')}), "
+                       f"fase attuale: {ph['phase_name'] if ph else 'n/d'}.")
+    products = await db.products.find({"user_id": user["id"], "active": True, "in_stock": True}).to_list(200)
+    prod_list = ", ".join(f"{x['name']} ({x['category']})" for x in products) or "nessuno (magazzino vuoto)"
+    system = ("Sei un fitopatologo esperto in frutticoltura. Analizza la foto della pianta/foglia/frutto e "
+              "diagnostica il problema. Rispondi in ITALIANO con queste sezioni in Markdown: "
+              "**Diagnosi** (patologia/parassita più probabile), **Gravità** (bassa/media/alta), "
+              "**Sintomi osservati**, **Trattamento consigliato** (categoria + principio attivo, dosi per litro d'acqua g/L o ml/L), "
+              "**Prevenzione**. Se la foto non è chiara, dillo. "
+              "Se tra i prodotti in magazzino ce n'è uno adatto, consiglialo esplicitamente. Max 220 parole.")
+    prompt = (f"Diagnostica il problema mostrato nella foto.{context} "
+              f"Note dell'utente: {body.notes or 'nessuna'}. "
+              f"Prodotti disponibili in magazzino: {prod_list}.")
+    chat = LlmChat(api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"diag-{user['id']}",
+                   system_message=system).with_model("anthropic", "claude-sonnet-4-6")
+    try:
+        reply = await chat.send_message(UserMessage(text=prompt, file_contents=[ImageContent(image_base64=img_b64)]))
+    except Exception as e:
+        logger.error("diagnosis error: %s", e)
+        raise HTTPException(502, "Diagnosi AI non disponibile al momento")
+    rec = {"user_id": user["id"], "plant_id": body.plant_id, "notes": body.notes,
+           "diagnosis": reply, "created_at": iso_now()}
+    res = await db.diagnoses.insert_one(dict(rec))
+    return {"diagnosis": reply, "id": str(res.inserted_id)}
+
+
+@api.get("/diagnosis")
+async def list_diagnosis(user: dict = Depends(get_current_user)):
+    docs = await db.diagnoses.find({"user_id": user["id"]}).sort("created_at", -1).to_list(50)
+    out = []
+    for d in docs:
+        d = clean(d)
+        if d.get("plant_id"):
+            pl = await db.plants.find_one({"_id": oid(d["plant_id"])})
+            d["plant_name"] = pl["name"] if pl else None
+        out.append(d)
+    return out
 
 
 @api.post("/ai/advisor")
